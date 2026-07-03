@@ -230,6 +230,13 @@ export const adminApi = {
     create: (body: unknown) => api.post("/admin/campaigns", body),
     send: (id: string) => api.post(`/admin/campaigns/${id}/send`),
   },
+  popups: {
+    list: () => api.get("/admin/popups"),
+    create: (body: unknown) => api.post("/admin/popups", body),
+    update: (id: string, body: unknown) => api.put(`/admin/popups/${id}`, body),
+    remove: (id: string) => api.delete(`/admin/popups/${id}`),
+    reorder: (ids: string[]) => api.post("/admin/popups/reorder", { ids }),
+  },
   tickets: {
     list: (qs = "") => api.get(`/admin/tickets${qs}`),
     detail: (id: string) => api.get(`/admin/tickets/${id}`),

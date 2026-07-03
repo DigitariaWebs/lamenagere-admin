@@ -14,6 +14,7 @@ import {
   LifeBuoy,
   ShieldCheck,
   Activity,
+  ImagePlay,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,6 +38,7 @@ export const NAV: NavItem[] = [
   { key: "customers", label: "Clients", href: "/customers", icon: Users },
   { key: "categories", label: "Catégories", href: "/categories", icon: FolderTree },
   { key: "featured", label: "Mise en avant", href: "/featured", icon: Star },
+  { key: "popups", label: "Pop-ups", href: "/popups", icon: ImagePlay },
   { key: "promoCodes", label: "Codes promo", href: "/promo-codes", icon: Ticket },
   { key: "campaigns", label: "Campagnes", href: "/campaigns", icon: Bell },
   { key: "settings", label: "Paramètres", href: "/settings", icon: Settings },
@@ -88,6 +90,10 @@ const STATIC_CRUMBS: Record<string, Crumb[]> = {
   "/featured": [
     { label: "Tableau de bord", href: "/dashboard" },
     { label: "Mise en avant" },
+  ],
+  "/popups": [
+    { label: "Tableau de bord", href: "/dashboard" },
+    { label: "Pop-ups" },
   ],
   "/promo-codes": [
     { label: "Tableau de bord", href: "/dashboard" },
@@ -165,6 +171,7 @@ export function getActiveKey(pathname: string): string {
   if (pathname.startsWith("/customers")) return "customers";
   if (pathname.startsWith("/categories")) return "categories";
   if (pathname.startsWith("/featured")) return "featured";
+  if (pathname.startsWith("/popups")) return "popups";
   if (pathname.startsWith("/promo-codes")) return "promoCodes";
   if (pathname.startsWith("/campaigns")) return "campaigns";
   if (pathname.startsWith("/settings")) return "settings";
