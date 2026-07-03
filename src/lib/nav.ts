@@ -7,6 +7,7 @@ import {
   Users,
   FolderTree,
   Star,
+  Ticket,
   Bell,
   Settings,
   BarChart3,
@@ -36,6 +37,7 @@ export const NAV: NavItem[] = [
   { key: "customers", label: "Clients", href: "/customers", icon: Users },
   { key: "categories", label: "Catégories", href: "/categories", icon: FolderTree },
   { key: "featured", label: "Mise en avant", href: "/featured", icon: Star },
+  { key: "promoCodes", label: "Codes promo", href: "/promo-codes", icon: Ticket },
   { key: "campaigns", label: "Campagnes", href: "/campaigns", icon: Bell },
   { key: "settings", label: "Paramètres", href: "/settings", icon: Settings },
   { key: "users", label: "Utilisateurs", href: "/users", icon: ShieldCheck },
@@ -86,6 +88,10 @@ const STATIC_CRUMBS: Record<string, Crumb[]> = {
   "/featured": [
     { label: "Tableau de bord", href: "/dashboard" },
     { label: "Mise en avant" },
+  ],
+  "/promo-codes": [
+    { label: "Tableau de bord", href: "/dashboard" },
+    { label: "Codes promo" },
   ],
   "/campaigns": [
     { label: "Tableau de bord", href: "/dashboard" },
@@ -159,6 +165,7 @@ export function getActiveKey(pathname: string): string {
   if (pathname.startsWith("/customers")) return "customers";
   if (pathname.startsWith("/categories")) return "categories";
   if (pathname.startsWith("/featured")) return "featured";
+  if (pathname.startsWith("/promo-codes")) return "promoCodes";
   if (pathname.startsWith("/campaigns")) return "campaigns";
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.startsWith("/users")) return "users";

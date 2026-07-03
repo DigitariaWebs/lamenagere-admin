@@ -10,8 +10,8 @@ import { useCurrentUser } from "@/lib/user-context";
 import { AdminRole, ADMIN_ROLE_LABELS } from "@/lib/types";
 
 const ROLE_NAV_KEYS: Record<AdminRole, string[]> = {
-  super_admin: ["dashboard", "analytics", "products", "orders", "quotes", "messages", "tickets", "customers", "categories", "featured", "campaigns", "settings", "users", "activity"],
-  admin: ["dashboard", "analytics", "products", "orders", "quotes", "messages", "tickets", "customers", "categories", "featured", "campaigns", "activity"],
+  super_admin: ["dashboard", "analytics", "products", "orders", "quotes", "messages", "tickets", "customers", "categories", "featured", "promoCodes", "campaigns", "settings", "users", "activity"],
+  admin: ["dashboard", "analytics", "products", "orders", "quotes", "messages", "tickets", "customers", "categories", "featured", "promoCodes", "campaigns", "activity"],
   manager: ["dashboard", "orders", "quotes", "messages", "tickets", "customers"],
   editor: ["dashboard", "products", "categories", "featured", "campaigns"],
   support: ["dashboard", "messages", "tickets", "customers"],

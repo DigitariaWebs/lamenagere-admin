@@ -142,6 +142,12 @@ export const adminApi = {
     remove: (id: string) => api.delete(`/admin/categories/${id}`),
     reorder: (ids: string[]) => api.post("/admin/categories/reorder", { ids }),
   },
+  promoCodes: {
+    list: () => api.get("/admin/promo-codes"),
+    create: (body: unknown) => api.post("/admin/promo-codes", body),
+    update: (id: string, body: unknown) => api.put(`/admin/promo-codes/${id}`, body),
+    remove: (id: string) => api.delete(`/admin/promo-codes/${id}`),
+  },
   orders: {
     list: (qs = "") => api.get(`/admin/orders${qs}`),
     /** Downloads the orders export as CSV and triggers a browser download. */
