@@ -21,6 +21,20 @@ interface OpeningTypeEntry {
   surcharge: string;
 }
 
+/** One quality tier row: label + its €/m² rate (as a text input). */
+interface QualityTierEntry {
+  key: string;
+  label: string;
+  pricePerSqm: string;
+}
+
+/** Standard tiers offered as one-click seeds; admin can add/remove/rename. */
+const DEFAULT_TIERS: { key: string; label: string }[] = [
+  { key: "bas", label: "Bas de gamme" },
+  { key: "milieu", label: "Milieu de gamme" },
+  { key: "haute", label: "Haute de gamme" },
+];
+
 interface Category {
   id: string;
   name: string;
@@ -40,6 +54,7 @@ interface Form {
   purchaseCost: string;
   pricePerSqm: string;
   openingTypes: OpeningTypeEntry[];
+  qualityTiers: QualityTierEntry[];
   minWidth: string;
   minHeight: string;
   maxWidth: string;
@@ -56,7 +71,7 @@ interface Form {
 const EMPTY: Form = {
   name: "", slug: "", sku: "", description: "", shortDescription: "",
   categoryId: "", priceKind: "fixed", status: "brouillon",
-  price: "", purchaseCost: "", pricePerSqm: "", openingTypes: [],
+  price: "", purchaseCost: "", pricePerSqm: "", openingTypes: [], qualityTiers: [],
   minWidth: "", minHeight: "", maxWidth: "", maxHeight: "",
   deliveryMetropole: "2-3 semaines", deliveryOutremer: "8-12 semaines",
   weightKg: "", volumeM3: "", freeShipping: false,
@@ -116,6 +131,9 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
           openingTypes: ((p.opening_types ?? []) as { type: string; surcharge_cents: number }[]).map(
             (o) => ({ type: o.type, surcharge: cents(o.surcharge_cents) }),
           ),
+          qualityTiers: (
+            (p.quality_tiers ?? []) as { key: string; label: string; price_per_sqm_cents: number }[]
+          ).map((t) => ({ key: t.key, label: t.label, pricePerSqm: cents(t.price_per_sqm_cents) })),
           minWidth: p.min_width != null ? String(p.min_width) : "",
           minHeight: p.min_height != null ? String(p.min_height) : "",
           maxWidth: p.max_width != null ? String(p.max_width) : "",
@@ -156,6 +174,34 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
     setForm((f) => ({
       ...f,
       openingTypes: f.openingTypes.map((o) => (o.type === type ? { ...o, surcharge } : o)),
+    }));
+  }
+
+  function addTier(seed?: { key: string; label: string }) {
+    setForm((f) => {
+      const key = seed?.key ?? `tier_${f.qualityTiers.length + 1}`;
+      if (f.qualityTiers.some((t) => t.key === key)) return f;
+      return {
+        ...f,
+        qualityTiers: [
+          ...f.qualityTiers,
+          { key, label: seed?.label ?? "", pricePerSqm: "" },
+        ],
+      };
+    });
+  }
+
+  function patchTier(index: number, p: Partial<QualityTierEntry>) {
+    setForm((f) => ({
+      ...f,
+      qualityTiers: f.qualityTiers.map((t, i) => (i === index ? { ...t, ...p } : t)),
+    }));
+  }
+
+  function removeTier(index: number) {
+    setForm((f) => ({
+      ...f,
+      qualityTiers: f.qualityTiers.filter((_, i) => i !== index),
     }));
   }
 
@@ -202,6 +248,13 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
       purchaseCost: num(form.purchaseCost),
       pricePerSqm: num(form.pricePerSqm),
       openingTypes: form.openingTypes.map((o) => ({ type: o.type, surcharge: num(o.surcharge) })),
+      // Only per-m² products carry tiers; drop rows without a label or rate.
+      qualityTiers:
+        form.priceKind === "sqm"
+          ? form.qualityTiers
+              .filter((t) => t.label.trim() && num(t.pricePerSqm) != null)
+              .map((t) => ({ key: t.key, label: t.label.trim(), pricePerSqm: num(t.pricePerSqm)! }))
+          : [],
       minWidth: num(form.minWidth),
       minHeight: num(form.minHeight),
       maxWidth: num(form.maxWidth),
@@ -401,8 +454,56 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
               <div style={{ marginTop: 20, padding: 16, background: "var(--surface-container-low)", borderRadius: 10 }}>
                 <div className="eyebrow" style={{ marginBottom: 10 }}>Calcul au m²</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-                  <div className="field"><label className="field-label">Prix au m² (€)</label><input className="input" value={form.pricePerSqm} onChange={(e) => patch({ pricePerSqm: e.target.value })} /></div>
+                  <div className="field">
+                    <label className="field-label">Prix au m² (€)</label>
+                    <input className="input" value={form.pricePerSqm} onChange={(e) => patch({ pricePerSqm: e.target.value })} disabled={form.qualityTiers.length > 0} />
+                    {form.qualityTiers.length > 0 && (
+                      <div style={{ fontSize: 11, color: "var(--outline)", marginTop: 4 }}>Ignoré : le prix vient des gammes ci-dessous.</div>
+                    )}
+                  </div>
                   <div className="field"><label className="field-label">Coût d&apos;achat (€)</label><input className="input" value={form.purchaseCost} onChange={(e) => patch({ purchaseCost: e.target.value })} /></div>
+                </div>
+
+                {/* Quality tiers: each has its own €/m² rate. When present, the
+                    customer must pick one and it drives the price. */}
+                <div className="field" style={{ marginBottom: 14 }}>
+                  <label className="field-label">Gammes (prix au m² par qualité)</label>
+                  <div style={{ fontSize: 12, color: "var(--outline)", margin: "4px 0 12px" }}>
+                    Proposez plusieurs qualités (ex. bas / milieu / haute de gamme), chacune avec son prix au m². Le client choisit sa gamme et le prix s&apos;ajuste. Laissez vide pour un tarif unique.
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {form.qualityTiers.map((tier, i) => (
+                      <div key={tier.key} className="hstack" style={{ gap: 8, alignItems: "center" }}>
+                        <input
+                          className="input"
+                          style={{ flex: 1 }}
+                          placeholder="Nom de la gamme"
+                          value={tier.label}
+                          onChange={(e) => patchTier(i, { label: e.target.value })}
+                        />
+                        <input
+                          className="input"
+                          style={{ width: 130 }}
+                          placeholder="€/m²"
+                          value={tier.pricePerSqm}
+                          onChange={(e) => patchTier(i, { pricePerSqm: e.target.value })}
+                        />
+                        <button type="button" className="btn btn-ghost" onClick={() => removeTier(i)} aria-label="Retirer la gamme">
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="hstack" style={{ gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                    {DEFAULT_TIERS.filter((d) => !form.qualityTiers.some((t) => t.key === d.key)).map((d) => (
+                      <button key={d.key} type="button" className="btn btn-ghost" onClick={() => addTier(d)}>
+                        + {d.label}
+                      </button>
+                    ))}
+                    <button type="button" className="btn btn-ghost" onClick={() => addTier()}>
+                      + Gamme personnalisée
+                    </button>
+                  </div>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                   <div className="field"><label className="field-label">Min L×H (cm)</label>
