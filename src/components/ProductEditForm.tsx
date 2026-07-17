@@ -9,6 +9,7 @@ import { adminApi, api } from "@/lib/api";
 import { OPENING_TYPES, type OpeningTypeKey } from "@/lib/types";
 import MediaLibrary from "./MediaLibrary";
 import CategoryBlocksEditor, { type ConfigBlock } from "./CategoryBlocksEditor";
+import ProductColorsEditor, { type ColorEntry } from "./ProductColorsEditor";
 
 type Mode = "edit" | "new";
 /** How a product is priced. "fixed" = single price; "sqm" = price per m² with
@@ -30,9 +31,9 @@ interface QualityTierEntry {
 
 /** Standard tiers offered as one-click seeds; admin can add/remove/rename. */
 const DEFAULT_TIERS: { key: string; label: string }[] = [
-  { key: "bas", label: "Bas de gamme" },
-  { key: "milieu", label: "Milieu de gamme" },
-  { key: "haute", label: "Haute de gamme" },
+  { key: "bas", label: "Économique" },
+  { key: "milieu", label: "Intermédiaire" },
+  { key: "haute", label: "Premium" },
 ];
 
 interface Category {
@@ -100,6 +101,7 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
   const [libOpen, setLibOpen] = useState(false);
   const [overrideBlocks, setOverrideBlocks] = useState(false);
   const [blocks, setBlocks] = useState<ConfigBlock[]>([]);
+  const [colors, setColors] = useState<ColorEntry[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
 
@@ -152,6 +154,20 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
         const pb = (p.config_blocks ?? []) as ConfigBlock[];
         setOverrideBlocks(pb.length > 0);
         setBlocks(pb);
+        const pc = (p.colors ?? []) as {
+          key: string;
+          name: string;
+          hex?: string;
+          images?: string[];
+        }[];
+        setColors(
+          pc.map((c) => ({
+            key: c.key ?? "",
+            name: c.name ?? "",
+            hex: c.hex ?? "#000000",
+            images: c.images ?? [],
+          })),
+        );
       })
       .catch((e: { message?: string }) => toast.error(e?.message ?? "Produit introuvable"))
       .finally(() => setLoading(false));
@@ -271,6 +287,15 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
       videoUrls: videos,
       // Empty → server stores null → product inherits its category template.
       configBlocks: overrideBlocks ? blocks : [],
+      // Drop unnamed colour rows; the server slugifies the key if missing.
+      colors: colors
+        .filter((c) => c.name.trim())
+        .map((c) => ({
+          key: c.key.trim(),
+          name: c.name.trim(),
+          hex: c.hex.trim() || undefined,
+          images: c.images,
+        })),
     };
   }
 
@@ -427,6 +452,16 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
           </div>
 
           <div className="card card-padded">
+            <div className="card-title" style={{ marginBottom: 8 }}>Couleurs</div>
+            <div style={{ fontSize: 12, color: "var(--outline)", marginBottom: 16 }}>
+              Proposez plusieurs coloris. Chaque couleur a ses propres photos : dans
+              l&apos;app, le client choisit la couleur et la galerie affiche le produit
+              dans ce coloris. Laissez vide si le produit n&apos;a qu&apos;une couleur.
+            </div>
+            <ProductColorsEditor colors={colors} onChange={setColors} />
+          </div>
+
+          <div className="card card-padded">
             <div className="card-title" style={{ marginBottom: 18 }}>Tarification</div>
 
             <div className="field">
@@ -469,7 +504,7 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
                 <div className="field" style={{ marginBottom: 14 }}>
                   <label className="field-label">Gammes (prix au m² par qualité)</label>
                   <div style={{ fontSize: 12, color: "var(--outline)", margin: "4px 0 12px" }}>
-                    Proposez plusieurs qualités (ex. bas / milieu / haute de gamme), chacune avec son prix au m². Le client choisit sa gamme et le prix s&apos;ajuste. Laissez vide pour un tarif unique.
+                    Proposez plusieurs qualités (ex. Économique / Intermédiaire / Premium), chacune avec son prix au m². Le client choisit sa gamme et le prix s&apos;ajuste. Laissez vide pour un tarif unique.
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {form.qualityTiers.map((tier, i) => (
