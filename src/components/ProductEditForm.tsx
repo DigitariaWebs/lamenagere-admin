@@ -60,6 +60,9 @@ interface Form {
   minHeight: string;
   maxWidth: string;
   maxHeight: string;
+  stockQty: string;
+  lowStockThreshold: string;
+  maxPerOrder: string;
   deliveryMetropole: string;
   deliveryOutremer: string;
   weightKg: string;
@@ -74,6 +77,7 @@ const EMPTY: Form = {
   categoryId: "", priceKind: "fixed", status: "brouillon",
   price: "", purchaseCost: "", pricePerSqm: "", openingTypes: [], qualityTiers: [],
   minWidth: "", minHeight: "", maxWidth: "", maxHeight: "",
+  stockQty: "", lowStockThreshold: "3", maxPerOrder: "",
   deliveryMetropole: "2-3 semaines", deliveryOutremer: "8-12 semaines",
   weightKg: "", volumeM3: "", freeShipping: false,
   seoTitle: "", seoDescription: "",
@@ -85,6 +89,13 @@ const num = (s: string): number | undefined => {
   return Number.isFinite(n) ? n : undefined;
 };
 const cents = (c: number | null): string => (c == null ? "" : String(c / 100));
+
+/** Whole-number field (stock, quantity caps). Blank / invalid → undefined. */
+const int = (s: string): number | undefined => {
+  if (!s.trim()) return undefined;
+  const n = Math.trunc(Number(s.replace(/\s/g, "")));
+  return Number.isFinite(n) ? n : undefined;
+};
 
 export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
   const isEdit = mode === "edit";
@@ -140,6 +151,10 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
           minHeight: p.min_height != null ? String(p.min_height) : "",
           maxWidth: p.max_width != null ? String(p.max_width) : "",
           maxHeight: p.max_height != null ? String(p.max_height) : "",
+          stockQty: p.stock_qty != null ? String(p.stock_qty) : "",
+          lowStockThreshold:
+            p.low_stock_threshold != null ? String(p.low_stock_threshold) : "",
+          maxPerOrder: p.max_per_order != null ? String(p.max_per_order) : "",
           deliveryMetropole: p.delivery_metropole ?? "",
           deliveryOutremer: p.delivery_outremer ?? "",
           weightKg: p.weight_kg != null ? String(p.weight_kg) : "",
@@ -263,7 +278,14 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
       price: num(form.price),
       purchaseCost: num(form.purchaseCost),
       pricePerSqm: num(form.pricePerSqm),
-      openingTypes: form.openingTypes.map((o) => ({ type: o.type, surcharge: num(o.surcharge) })),
+      // Opening types belong to made-to-measure joinery. A fixed-price product
+      // is bought by the unit, so it never carries them — sending one would
+      // push the customer into the guided configuration flow instead of the
+      // quantity stepper.
+      openingTypes:
+        form.priceKind === "sqm"
+          ? form.openingTypes.map((o) => ({ type: o.type, surcharge: num(o.surcharge) }))
+          : [],
       // Only per-m² products carry tiers; drop rows without a label or rate.
       qualityTiers:
         form.priceKind === "sqm"
@@ -276,6 +298,12 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
       maxWidth: num(form.maxWidth),
       maxHeight: num(form.maxHeight),
       customizable: form.priceKind === "sqm",
+      // Stock and the per-order cap only bound the unit-sale stepper; a per-m²
+      // product is made to order, so both are dropped.
+      stockQty: form.priceKind === "fixed" ? int(form.stockQty) : undefined,
+      lowStockThreshold:
+        form.priceKind === "fixed" ? int(form.lowStockThreshold) : undefined,
+      maxPerOrder: form.priceKind === "fixed" ? int(form.maxPerOrder) : undefined,
       deliveryMetropole: form.deliveryMetropole || undefined,
       deliveryOutremer: form.deliveryOutremer || undefined,
       weightKg: num(form.weightKg),
@@ -558,6 +586,86 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
             )}
           </div>
 
+          {/* Unit-sale module. Only fixed-price products are bought by the
+              unit; per-m² products are made to order from dimensions. */}
+          {form.priceKind === "fixed" && (
+            <div className="card card-padded">
+              <div className="card-title" style={{ marginBottom: 8 }}>Vente à l&apos;unité</div>
+              <div style={{ fontSize: 12, color: "var(--outline)", marginBottom: 20 }}>
+                Dans l&apos;app, le client choisit une quantité avec − / + puis ajoute au
+                panier. Renseignez le stock pour que le sélecteur s&apos;arrête à ce qui
+                reste disponible.
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 20 }}>
+                <div className="field">
+                  <label className="field-label">Stock disponible</label>
+                  <input
+                    className="input"
+                    inputMode="numeric"
+                    placeholder="Illimité"
+                    value={form.stockQty}
+                    onChange={(e) => patch({ stockQty: e.target.value })}
+                  />
+                  <div style={{ fontSize: 11, color: "var(--outline)", marginTop: 4 }}>
+                    Vide = stock non suivi
+                  </div>
+                </div>
+                <div className="field">
+                  <label className="field-label">Seuil stock faible</label>
+                  <input
+                    className="input"
+                    inputMode="numeric"
+                    placeholder="3"
+                    value={form.lowStockThreshold}
+                    onChange={(e) => patch({ lowStockThreshold: e.target.value })}
+                  />
+                  <div style={{ fontSize: 11, color: "var(--outline)", marginTop: 4 }}>
+                    En dessous, l&apos;app affiche l&apos;alerte
+                  </div>
+                </div>
+                <div className="field">
+                  <label className="field-label">Max par commande</label>
+                  <input
+                    className="input"
+                    inputMode="numeric"
+                    placeholder="Aucune limite"
+                    value={form.maxPerOrder}
+                    onChange={(e) => patch({ maxPerOrder: e.target.value })}
+                  />
+                  <div style={{ fontSize: 11, color: "var(--outline)", marginTop: 4 }}>
+                    Plafond du sélecteur
+                  </div>
+                </div>
+              </div>
+
+              {/* States plainly what the customer ends up seeing. */}
+              <div
+                style={{
+                  marginTop: 20,
+                  padding: "12px 14px",
+                  background: "var(--surface-container-low)",
+                  borderRadius: 10,
+                  fontSize: 12,
+                  color: "var(--on-surface-variant)",
+                }}
+              >
+                {(() => {
+                  const stock = int(form.stockQty);
+                  const cap = int(form.maxPerOrder);
+                  if (stock != null && stock <= 0) {
+                    return "Stock épuisé : l'app affiche « Rupture de stock » et le bouton Ajouter au panier est désactivé.";
+                  }
+                  const limit = Math.min(stock ?? Infinity, cap ?? Infinity);
+                  return Number.isFinite(limit)
+                    ? `Le client pourra choisir de 1 à ${limit} unité${limit > 1 ? "s" : ""}.`
+                    : "Le client pourra choisir de 1 à 99 unités (aucune limite fixée).";
+                })()}
+              </div>
+            </div>
+          )}
+
+          {form.priceKind === "sqm" && (
           <div className="card card-padded">
             <div className="card-title" style={{ marginBottom: 8 }}>Types d&apos;ouverture</div>
             <div style={{ fontSize: 12, color: "var(--outline)", marginBottom: 16 }}>Sélectionnez les ouvertures disponibles et leur supplément éventuel</div>
@@ -590,11 +698,14 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
               })}
             </div>
           </div>
+          )}
 
           <div className="card card-padded">
             <div className="card-title" style={{ marginBottom: 8 }}>Configuration (blocs)</div>
             <div style={{ fontSize: 12, color: "var(--outline)", marginBottom: 14 }}>
-              Par défaut, ce produit hérite des blocs de sa catégorie. Activez la personnalisation pour lui donner ses propres blocs (accessoires, couleurs…).
+              {form.priceKind === "fixed"
+                ? "Un produit à prix fixe se vend à l'unité : il n'hérite pas des blocs de sa catégorie. Activez la personnalisation seulement pour lui demander un choix avant l'achat — le client passera alors par la configuration guidée au lieu du sélecteur de quantité."
+                : "Par défaut, ce produit hérite des blocs de sa catégorie. Activez la personnalisation pour lui donner ses propres blocs (accessoires, couleurs…)."}
             </div>
             <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, marginBottom: overrideBlocks ? 16 : 0 }}>
               <span>Personnaliser pour ce produit</span>
