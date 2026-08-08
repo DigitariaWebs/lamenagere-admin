@@ -56,7 +56,9 @@ export default function ProductsPage() {
   async function load() {
     setLoading(true);
     try {
-      const res = (await adminApi.products.list("?page=1&limit=100")) as {
+      const params = new URLSearchParams({ page: "1", limit: "100" });
+      if (search.trim()) params.set("q", search.trim());
+      const res = (await adminApi.products.list(`?${params.toString()}`)) as {
         items: AdminProduct[];
       };
       setProducts(res.items ?? []);
@@ -69,7 +71,8 @@ export default function ProductsPage() {
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const categories = useMemo(() => {
     const set = new Map<string, number>();
@@ -90,8 +93,6 @@ export default function ProductsPage() {
   const filtered = products.filter((p) => {
     if (statusTab !== "all" && p.status !== statusTab) return false;
     if (catTab !== "all" && p.category !== catTab) return false;
-    if (search && !`${p.name} ${p.sku}`.toLowerCase().includes(search.toLowerCase()))
-      return false;
     return true;
   });
 
