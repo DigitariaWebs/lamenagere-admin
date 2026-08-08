@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Trash2, GripVertical, ArrowUp, ArrowDown } from "lucide-react";
 import MediaLibrary from "./MediaLibrary";
 
@@ -220,6 +220,20 @@ function OptionsBody({ block, update }: { block: ConfigBlock; update: (p: Partia
   const withSurcharge = block.type === "colors" || block.type === "opening_details" || block.type === "options";
   const set = (i: number, p: Partial<ConfigBlockOption>) =>
     update({ options: options.map((o, k) => (k === i ? { ...o, ...p } : o)) });
+
+  // Options created before a `hex` default existed were left with hex
+  // undefined. The color <input> already *displayed* black by default, so an
+  // admin who never touched the picker assumed the color was saved when it
+  // wasn't — the app then fell back to a near-white swatch. Backfill once so
+  // saving the block persists the color the admin actually saw.
+  useEffect(() => {
+    if (!withColor) return;
+    if (options.some((o) => !o.hex)) {
+      update({ options: options.map((o) => (o.hex ? o : { ...o, hex: "#000000" })) });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [withColor, options]);
+
   return (
     <div>
       {(block.type === "colors" || block.type === "accessories" || block.type === "options") && (
@@ -246,7 +260,11 @@ function OptionsBody({ block, update }: { block: ConfigBlock; update: (p: Partia
           </button>
         </div>
       ))}
-      <button type="button" className="btn btn-outline btn-sm" onClick={() => update({ options: [...options, { key: uid("opt"), label: "" }] })}>
+      <button
+        type="button"
+        className="btn btn-outline btn-sm"
+        onClick={() => update({ options: [...options, { key: uid("opt"), label: "", ...(withColor ? { hex: "#000000" } : {}) }] })}
+      >
         <Plus size={13} /> Ajouter une option
       </button>
     </div>
