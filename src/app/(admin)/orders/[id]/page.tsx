@@ -1,5 +1,6 @@
 "use client";
 
+import { formatEnteredDimensions, type AreaDimensions } from "@/lib/area-formulas";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -41,7 +42,7 @@ interface OrderItem {
   product: { name: string; images: string[] };
   quantity: number;
   price: number;
-  customDimensions?: { width: number; height: number };
+  customDimensions?: AreaDimensions;
   configuration?: ConfigEntry[];
 }
 
@@ -299,7 +300,7 @@ export default function OrderDetailPage() {
                             </div>
                           </div>
                         </td>
-                        <td><span style={{ fontSize: 12.5 }}>{it.customDimensions ? `${it.customDimensions.width}×${it.customDimensions.height} cm` : "—"}</span></td>
+                        <td><span style={{ fontSize: 12.5 }}>{it.customDimensions ? formatEnteredDimensions(it.customDimensions) : "—"}</span></td>
                         <td style={{ textAlign: "center" }}>{it.quantity}</td>
                         <td style={{ textAlign: "right" }} className="num">{formatEUR(it.price)}</td>
                         <td style={{ textAlign: "right" }} className="num">{formatEUR(it.price * it.quantity)}</td>

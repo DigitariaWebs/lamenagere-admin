@@ -1,4 +1,5 @@
 "use client";
+import { DIMENSION_ROLES, type DimensionRole } from "@/lib/area-formulas";
 
 import { useEffect, useState } from "react";
 import { Plus, Trash2, GripVertical, ArrowUp, ArrowDown } from "lucide-react";
@@ -20,6 +21,11 @@ export interface ConfigBlockField {
   unit?: string;
   min?: number;
   max?: number;
+  /**
+   * For per-m² products priced by shape: what this measurement contributes to
+   * the billed surface. Untagged fields are recorded but never billed.
+   */
+  priceRole?: DimensionRole | null;
 }
 export interface ConfigBlockOption {
   key: string;
@@ -27,6 +33,8 @@ export interface ConfigBlockOption {
   image?: string;
   hex?: string;
   surchargeCents?: number;
+  /** Shape options only: how many pans this shape bills (I = 1, L = 2, U = 3). */
+  runs?: number | null;
 }
 export interface ConfigBlockItem {
   id: string;
@@ -201,11 +209,35 @@ function MeasurementsBody({ block, update }: { block: ConfigBlock; update: (p: P
           <input className="input" style={{ width: 64 }} placeholder="cm" value={f.unit ?? ""} onChange={(e) => set(i, { unit: e.target.value })} />
           <input className="input" style={{ width: 64 }} type="number" placeholder="min" value={f.min ?? ""} onChange={(e) => set(i, { min: e.target.value === "" ? undefined : Number(e.target.value) })} />
           <input className="input" style={{ width: 64 }} type="number" placeholder="max" value={f.max ?? ""} onChange={(e) => set(i, { max: e.target.value === "" ? undefined : Number(e.target.value) })} />
+          {/* Only meaningful for per-m² products on the "pilotée par la forme"
+              formula: tags which measurements actually make up the surface. */}
+          <select
+            className="input"
+            style={{ width: 150 }}
+            title="Rôle dans le calcul du prix au m²"
+            value={f.priceRole ?? ""}
+            onChange={(e) =>
+              set(i, { priceRole: (e.target.value || null) as DimensionRole | null })
+            }
+          >
+            <option value="">Non facturé</option>
+            {DIMENSION_ROLES.map((r) => (
+              <option key={r.key} value={r.key}>
+                {r.label}
+              </option>
+            ))}
+          </select>
           <button type="button" className="icon-btn" style={{ width: 28, height: 28, color: "var(--error)" }} onClick={() => update({ fields: fields.filter((_, k) => k !== i) })}>
             <Trash2 size={13} />
           </button>
         </div>
       ))}
+      <div style={{ fontSize: 11, color: "var(--outline)", margin: "6px 0 10px" }}>
+        « Rôle » ne sert qu&apos;aux produits au m² réglés sur la formule
+        <strong> pilotée par la forme</strong> : les champs marqués Pan 1/2/3 sont
+        additionnés puis multipliés par le champ marqué Hauteur. Les autres mesures
+        sont enregistrées pour l&apos;atelier sans influencer le prix.
+      </div>
       <button type="button" className="btn btn-outline btn-sm" onClick={() => update({ fields: [...fields, { key: uid("f"), label: "" }] })}>
         <Plus size={13} /> Ajouter un champ
       </button>
@@ -252,6 +284,22 @@ function OptionsBody({ block, update }: { block: ConfigBlock; update: (p: Partia
             <input type="color" value={o.hex ?? "#000000"} onChange={(e) => set(i, { hex: e.target.value })} style={{ width: 38, height: 34, padding: 0, border: "none", background: "none" }} />
           )}
           {withImage && <ImagePick value={o.image} onChange={(url) => set(i, { image: url })} />}
+          {block.type === "shape" && (
+            <select
+              className="input"
+              style={{ width: 132 }}
+              title="Nombre de pans facturés (prix au m² piloté par la forme)"
+              value={o.runs ?? ""}
+              onChange={(e) =>
+                set(i, { runs: e.target.value === "" ? null : Number(e.target.value) })
+              }
+            >
+              <option value="">Pans : —</option>
+              <option value="1">1 pan (I)</option>
+              <option value="2">2 pans (L)</option>
+              <option value="3">3 pans (U)</option>
+            </select>
+          )}
           {withSurcharge && (
             <input className="input" style={{ width: 92 }} type="number" placeholder="surcoût €" value={centsToEuros(o.surchargeCents)} onChange={(e) => set(i, { surchargeCents: eurosToCents(e.target.value) })} />
           )}

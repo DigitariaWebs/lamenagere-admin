@@ -1,5 +1,6 @@
 "use client";
 
+import { AREA_FORMULAS, AREA_FORMULA_KEYS, type AreaFormulaKey } from "@/lib/area-formulas";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -54,6 +55,8 @@ interface Form {
   price: string;
   purchaseCost: string;
   pricePerSqm: string;
+  /** Which dimensions the customer is asked for, and how they make a surface. */
+  areaFormula: AreaFormulaKey;
   openingTypes: OpeningTypeEntry[];
   qualityTiers: QualityTierEntry[];
   minWidth: string;
@@ -75,7 +78,8 @@ interface Form {
 const EMPTY: Form = {
   name: "", slug: "", sku: "", description: "", shortDescription: "",
   categoryId: "", priceKind: "fixed", status: "brouillon",
-  price: "", purchaseCost: "", pricePerSqm: "", openingTypes: [], qualityTiers: [],
+  price: "", purchaseCost: "", pricePerSqm: "", areaFormula: "width_height",
+  openingTypes: [], qualityTiers: [],
   minWidth: "", minHeight: "", maxWidth: "", maxHeight: "",
   stockQty: "", lowStockThreshold: "3", maxPerOrder: "",
   deliveryMetropole: "2-3 semaines", deliveryOutremer: "8-12 semaines",
@@ -141,6 +145,7 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
           price: cents(p.base_price_cents),
           purchaseCost: cents(p.purchase_cost_cents),
           pricePerSqm: cents(p.price_per_sqm_cents),
+          areaFormula: (p.area_formula ?? "width_height") as AreaFormulaKey,
           openingTypes: ((p.opening_types ?? []) as { type: string; surcharge_cents: number }[]).map(
             (o) => ({ type: o.type, surcharge: cents(o.surcharge_cents) }),
           ),
@@ -278,6 +283,7 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
       price: num(form.price),
       purchaseCost: num(form.purchaseCost),
       pricePerSqm: num(form.pricePerSqm),
+    areaFormula: form.priceKind === "sqm" ? form.areaFormula : undefined,
       // Opening types belong to made-to-measure joinery. A fixed-price product
       // is bought by the unit, so it never carries them — sending one would
       // push the customer into the guided configuration flow instead of the
@@ -527,6 +533,33 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
                   <div className="field"><label className="field-label">Coût d&apos;achat (€)</label><input className="input" value={form.purchaseCost} onChange={(e) => patch({ purchaseCost: e.target.value })} /></div>
                 </div>
 
+                {/* Formule de calcul: decides which dimensions the customer is
+                    asked for in the app and how they become a billable surface.
+                    The server prices with the same formula, so the two agree. */}
+                <div className="field" style={{ marginBottom: 14 }}>
+                  <label className="field-label">Formule de calcul</label>
+                  <select
+                    className="input"
+                    value={form.areaFormula}
+                    onChange={(e) => patch({ areaFormula: e.target.value as AreaFormulaKey })}
+                  >
+                    {AREA_FORMULA_KEYS.map((k) => (
+                      <option key={k} value={k}>
+                        {AREA_FORMULAS[k].label}
+                      </option>
+                    ))}
+                  </select>
+                  <div style={{ fontSize: 12, color: "var(--outline)", marginTop: 6 }}>
+                    {AREA_FORMULAS[form.areaFormula].hint}
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--on-surface-variant)", marginTop: 8 }}>
+                    Surface facturée = <strong>{AREA_FORMULAS[form.areaFormula].expression}</strong>
+                    <br />
+                    Le client saisira :{" "}
+                    {AREA_FORMULAS[form.areaFormula].fields.map((f) => f.label).join(", ")}.
+                  </div>
+                </div>
+
                 {/* Quality tiers: each has its own €/m² rate. When present, the
                     customer must pick one and it drives the price. */}
                 <div className="field" style={{ marginBottom: 14 }}>
@@ -567,6 +600,10 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
                       + Gamme personnalisée
                     </button>
                   </div>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--outline)", marginBottom: 8 }}>
+                  Bornes de saisie. La 1ʳᵉ valeur borne <strong>toutes</strong> les mesures
+                  horizontales (largeur, longueur, gauche, fond, droite) ; la 2ᵉ borne la hauteur.
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                   <div className="field"><label className="field-label">Min L×H (cm)</label>
