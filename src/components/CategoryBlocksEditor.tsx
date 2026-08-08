@@ -11,7 +11,8 @@ export type ConfigBlockType =
   | "colors"
   | "accessories"
   | "opening_details"
-  | "photos";
+  | "photos"
+  | "options";
 
 export interface ConfigBlockField {
   key: string;
@@ -53,6 +54,7 @@ const BLOCK_META: Record<ConfigBlockType, { label: string; hint: string; default
   accessories: { label: "Accessoires", hint: "Liste d'options avec prix et image", defaultLabel: "Accessoires de rangement" },
   opening_details: { label: "Détails d'ouverture", hint: "Battant, asymétrique… prix + image", defaultLabel: "Détails d'ouverture" },
   photos: { label: "Photos du client", hint: "Le client téléverse des photos de son emplacement", defaultLabel: "Photos de l'emplacement" },
+  options: { label: "Options personnalisées", hint: "Choix générique avec ou sans image", defaultLabel: "Options" },
 };
 
 const ORDER: ConfigBlockType[] = [
@@ -62,6 +64,7 @@ const ORDER: ConfigBlockType[] = [
   "accessories",
   "opening_details",
   "photos",
+  "options",
 ];
 
 function uid(prefix: string): string {
@@ -92,7 +95,7 @@ export default function CategoryBlocksEditor({ blocks, onChange }: Props) {
     const base: ConfigBlock = { id: uid("blk"), type: adding, label: meta.defaultLabel };
     if (adding === "measurements") base.fields = [];
     else if (adding === "accessories") { base.items = []; base.multiple = true; }
-    else if (adding === "colors" || adding === "shape" || adding === "opening_details") base.options = [];
+    else if (adding === "colors" || adding === "shape" || adding === "opening_details" || adding === "options") base.options = [];
     onChange([...blocks, base]);
   }
   function removeBlock(id: string) {
@@ -212,14 +215,14 @@ function MeasurementsBody({ block, update }: { block: ConfigBlock; update: (p: P
 
 function OptionsBody({ block, update }: { block: ConfigBlock; update: (p: Partial<ConfigBlock>) => void }) {
   const options = block.options ?? [];
-  const withImage = block.type === "shape" || block.type === "opening_details";
+  const withImage = block.type === "shape" || block.type === "opening_details" || block.type === "options";
   const withColor = block.type === "colors";
-  const withSurcharge = block.type === "colors" || block.type === "opening_details";
+  const withSurcharge = block.type === "colors" || block.type === "opening_details" || block.type === "options";
   const set = (i: number, p: Partial<ConfigBlockOption>) =>
     update({ options: options.map((o, k) => (k === i ? { ...o, ...p } : o)) });
   return (
     <div>
-      {(block.type === "colors" || block.type === "accessories") && (
+      {(block.type === "colors" || block.type === "accessories" || block.type === "options") && (
         <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, marginBottom: 10 }}>
           <span>Choix multiple</span>
           <span className="switch">
