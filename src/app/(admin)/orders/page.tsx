@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Search } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { adminApi } from "@/lib/api";
 
 interface AdminOrder {
@@ -55,36 +55,62 @@ function relativeTime(iso: string): string {
   return `il y a ${Math.round(h / 24)} j`;
 }
 
+const PAGE_SIZE = 50;
+
 export default function OrdersPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(0);
   const [territory, setTerritory] = useState("all");
   const [account, setAccount] = useState("all");
   const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
 
+  // Debounce keystrokes so typing doesn't fire a request per character.
   useEffect(() => {
-    const params = new URLSearchParams({ page: "1", limit: "100" });
+    const t = setTimeout(() => setQuery(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Any filter change invalidates the current page number.
+  useEffect(() => {
+    setPage(1);
+  }, [tab, territory, account, query]);
+
+  const load = useCallback(async () => {
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(PAGE_SIZE),
+    });
     if (TABS[tab].status) params.set("status", TABS[tab].status);
     if (territory !== "all") params.set("territory", territory);
     if (account !== "all") params.set("accountType", account);
-    if (search.trim()) params.set("q", search.trim());
+    if (query) params.set("q", query);
 
     setLoading(true);
-    adminApi.orders
-      .list(`?${params.toString()}`)
-      .then((r) => {
-        const res = r as { items: AdminOrder[]; total: number };
-        setOrders(res.items ?? []);
-        setTotal(res.total ?? 0);
-      })
-      .catch((e: { message?: string }) =>
-        toast.error(e?.message ?? "Chargement impossible"),
-      )
-      .finally(() => setLoading(false));
-  }, [tab, territory, account, search]);
+    try {
+      const res = await adminApi.orders.list<AdminOrder>(`?${params.toString()}`);
+      setOrders(res?.items ?? []);
+      setTotal(res?.total ?? 0);
+      setHasMore(Boolean(res?.hasMore));
+    } catch (e) {
+      toast.error((e as { message?: string })?.message ?? "Chargement impossible");
+    } finally {
+      setLoading(false);
+    }
+  }, [page, tab, territory, account, query]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = (page - 1) * PAGE_SIZE + orders.length;
 
   return (
     <div className="page">
@@ -199,7 +225,30 @@ export default function OrdersPage() {
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 24px", borderTop: "1px solid var(--outline-soft)" }}>
           <div style={{ fontSize: 12, color: "var(--outline)" }}>
-            {orders.length} sur {total} commande(s)
+            {total === 0
+              ? "Aucune commande"
+              : `${rangeStart}–${rangeEnd} sur ${total} commande${total > 1 ? "s" : ""}`}
+          </div>
+          <div className="hstack" style={{ gap: 10 }}>
+            <button
+              className="btn btn-outline btn-sm"
+              disabled={page <= 1 || loading}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <ChevronLeft size={14} strokeWidth={2} />
+              <span>Précédent</span>
+            </button>
+            <span style={{ fontSize: 12, color: "var(--outline)" }}>
+              Page {page} / {pageCount}
+            </span>
+            <button
+              className="btn btn-outline btn-sm"
+              disabled={!hasMore || loading}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              <span>Suivant</span>
+              <ChevronRight size={14} strokeWidth={2} />
+            </button>
           </div>
         </div>
       </div>

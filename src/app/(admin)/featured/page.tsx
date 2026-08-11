@@ -96,13 +96,13 @@ export default function FeaturedPage() {
       adminApi.featured.products() as Promise<FeaturedProduct[]>,
       adminApi.featured.carousel() as Promise<Slide[]>,
       adminApi.featured.banners() as Promise<Banner[]>,
-      adminApi.products.list("?page=1&limit=200") as Promise<{ items: ProductOption[] }>,
+      adminApi.products.listAll<ProductOption>(),
       adminApi.categories.list() as Promise<CategoryOption[]>,
     ]);
     setFeatured(f ?? []);
     setSlides(c ?? []);
     setBanners(b ?? []);
-    setAllProducts(p?.items ?? []);
+    setAllProducts(p ?? []);
     setCategories(cats ?? []);
   }
 

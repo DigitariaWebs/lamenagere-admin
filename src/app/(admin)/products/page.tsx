@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Search, Plus, MoreHorizontal, Check } from "lucide-react";
-import { adminApi } from "@/lib/api";
+import { Search, Plus, MoreHorizontal, Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { adminApi, type ProductFacets } from "@/lib/api";
 
 interface AdminProduct {
   id: string;
@@ -44,57 +44,112 @@ const STATUS_TABS = [
   { key: "archive", label: "Archivés" },
 ];
 
+const PAGE_SIZE = 50;
+
+interface CategoryOption {
+  id: string;
+  name: string;
+}
+
 export default function ProductsPage() {
   const router = useRouter();
   const [products, setProducts] = useState<AdminProduct[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [facets, setFacets] = useState<ProductFacets | null>(null);
+  const [allCategories, setAllCategories] = useState<CategoryOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusTab, setStatusTab] = useState("all");
-  const [catTab, setCatTab] = useState("all");
+  const [catId, setCatId] = useState("all");
   const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  async function load() {
+  // Debounce keystrokes so typing doesn't fire a request per character.
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Any filter change invalidates the current page number.
+  useEffect(() => {
+    setPage(1);
+  }, [query, statusTab, catId]);
+
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: "1", limit: "100" });
-      if (search.trim()) params.set("q", search.trim());
-      const res = (await adminApi.products.list(`?${params.toString()}`)) as {
-        items: AdminProduct[];
-      };
-      setProducts(res.items ?? []);
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(PAGE_SIZE),
+      });
+      if (query) params.set("q", query);
+      if (statusTab !== "all") params.set("status", statusTab);
+      if (catId !== "all") params.set("categoryId", catId);
+
+      // Filtering happens server-side, over the whole catalogue — never over
+      // the slice that happens to be on screen.
+      const res = await adminApi.products.list<AdminProduct>(`?${params.toString()}`);
+      setProducts(res?.items ?? []);
+      setTotal(res?.total ?? 0);
+      setHasMore(Boolean(res?.hasMore));
+      // A bulk delete can empty the page we're standing on; fall back one page.
+      if (!res?.items?.length && page > 1) setPage((p) => p - 1);
     } catch (e) {
       toast.error((e as { message?: string })?.message ?? "Chargement impossible");
     } finally {
       setLoading(false);
     }
-  }
+  }, [page, query, statusTab, catId]);
+
+  // Counts span the whole catalogue, so they only move when the search does.
+  const loadFacets = useCallback(async () => {
+    try {
+      setFacets(await adminApi.products.facets(query));
+    } catch {
+      setFacets(null); // Counts are cosmetic — never block the table on them.
+    }
+  }, [query]);
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [load]);
 
+  useEffect(() => {
+    loadFacets();
+  }, [loadFacets]);
+
+  useEffect(() => {
+    adminApi.categories
+      .list()
+      .then((c) => setAllCategories((c as CategoryOption[]) ?? []))
+      .catch(() => setAllCategories([]));
+  }, []);
+
+  // Only categories that actually hold matching products, busiest first.
   const categories = useMemo(() => {
-    const set = new Map<string, number>();
-    for (const p of products) set.set(p.category, (set.get(p.category) ?? 0) + 1);
-    return [...set.entries()].map(([label, count]) => ({ label, count }));
-  }, [products]);
+    if (!facets) return [];
+    const byId = new Map(allCategories.map((c) => [c.id, c.name]));
+    return facets.byCategory
+      .filter((c) => c.count > 0 && byId.has(c.categoryId))
+      .map((c) => ({ id: c.categoryId, label: byId.get(c.categoryId)!, count: c.count }))
+      .sort((a, b) => b.count - a.count);
+  }, [facets, allCategories]);
 
   const counts = useMemo(
     () => ({
-      all: products.length,
-      publie: products.filter((p) => p.status === "publie").length,
-      brouillon: products.filter((p) => p.status === "brouillon").length,
-      archive: products.filter((p) => p.status === "archive").length,
+      all: facets?.total ?? 0,
+      publie: facets?.byStatus.publie ?? 0,
+      brouillon: facets?.byStatus.brouillon ?? 0,
+      archive: facets?.byStatus.archive ?? 0,
     }),
-    [products],
+    [facets],
   );
 
-  const filtered = products.filter((p) => {
-    if (statusTab !== "all" && p.status !== statusTab) return false;
-    if (catTab !== "all" && p.category !== catTab) return false;
-    return true;
-  });
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = (page - 1) * PAGE_SIZE + products.length;
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -110,7 +165,7 @@ export default function ProductsPage() {
       await adminApi.products.bulk({ ids: [...selected], action });
       toast.success("Action appliquée");
       setSelected(new Set());
-      load();
+      await Promise.all([load(), loadFacets()]);
     } catch (e) {
       toast.error((e as { message?: string })?.message ?? "Échec de l'action");
     }
@@ -165,11 +220,11 @@ export default function ProductsPage() {
         <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--outline-soft)" }}>
           <div className="chips">
             <span className="eyebrow" style={{ marginRight: 8 }}>Catégorie</span>
-            <button className={`chip${catTab === "all" ? " active" : ""}`} onClick={() => setCatTab("all")}>
+            <button className={`chip${catId === "all" ? " active" : ""}`} onClick={() => setCatId("all")}>
               Toutes
             </button>
             {categories.map((c) => (
-              <button key={c.label} className={`chip${catTab === c.label ? " active" : ""}`} onClick={() => setCatTab(c.label)}>
+              <button key={c.id} className={`chip${catId === c.id ? " active" : ""}`} onClick={() => setCatId(c.id)}>
                 {c.label}
                 <span className="count">{c.count}</span>
               </button>
@@ -194,7 +249,7 @@ export default function ProductsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((p) => {
+              {products.map((p) => {
                 const checked = selected.has(p.id);
                 const stock = p.stock ? STOCK_LABEL[p.stock] : null;
                 return (
@@ -242,7 +297,7 @@ export default function ProductsPage() {
               })}
             </tbody>
           </table>
-          {!loading && filtered.length === 0 && (
+          {!loading && products.length === 0 && (
             <div style={{ padding: 24, color: "var(--outline)", fontSize: 13 }}>
               Aucun produit.
             </div>
@@ -250,7 +305,30 @@ export default function ProductsPage() {
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 24px", borderTop: "1px solid var(--outline-soft)" }}>
           <div style={{ fontSize: 12, color: "var(--outline)" }}>
-            {filtered.length} produit{filtered.length > 1 ? "s" : ""}
+            {total === 0
+              ? "Aucun produit"
+              : `${rangeStart}–${rangeEnd} sur ${total} produit${total > 1 ? "s" : ""}`}
+          </div>
+          <div className="hstack" style={{ gap: 10 }}>
+            <button
+              className="btn btn-outline btn-sm"
+              disabled={page <= 1 || loading}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <ChevronLeft size={14} strokeWidth={2} />
+              <span>Précédent</span>
+            </button>
+            <span style={{ fontSize: 12, color: "var(--outline)" }}>
+              Page {page} / {pageCount}
+            </span>
+            <button
+              className="btn btn-outline btn-sm"
+              disabled={!hasMore || loading}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              <span>Suivant</span>
+              <ChevronRight size={14} strokeWidth={2} />
+            </button>
           </div>
         </div>
       </div>

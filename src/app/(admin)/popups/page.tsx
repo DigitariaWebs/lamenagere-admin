@@ -73,11 +73,11 @@ export default function PopupsPage() {
   async function load() {
     const [p, prods, cats] = await Promise.all([
       adminApi.popups.list() as Promise<Popup[]>,
-      adminApi.products.list("?page=1&limit=200") as Promise<{ items: ProductOption[] }>,
+      adminApi.products.listAll<ProductOption>(),
       adminApi.categories.list() as Promise<CategoryOption[]>,
     ]);
     setPopups(p ?? []);
-    setAllProducts(prods?.items ?? []);
+    setAllProducts(prods ?? []);
     setCategories(cats ?? []);
   }
 

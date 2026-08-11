@@ -6,6 +6,9 @@ import { adminApi } from "@/lib/api";
 import { formatEUR } from "@/lib/format";
 import { Sparkline, Donut, TrendChart, VBars, PALETTE } from "@/components/charts/Charts";
 
+/** Slices the category donut can stay readable with. Display size, not a data limit. */
+const DONUT_SEGMENTS = 8;
+
 interface Kpi { value: number; previous: number; spark: number[] }
 interface Analytics {
   rangeDays: number;
@@ -163,7 +166,7 @@ export default function AnalyticsPage() {
         <div className="card card-padded">
           <div className="eyebrow" style={{ marginBottom: 18 }}>Répartition du CA par catégorie</div>
           <Donut
-            segments={(data?.categoryMix ?? []).slice(0, 8).map((c, i) => ({ label: c.category, value: c.revenue, color: PALETTE[i % PALETTE.length] }))}
+            segments={(data?.categoryMix ?? []).slice(0, DONUT_SEGMENTS).map((c, i) => ({ label: c.category, value: c.revenue, color: PALETTE[i % PALETTE.length] }))}
             centerTop="Total"
             centerValue={data ? compactEUR(data.categoryMix.reduce((n, c) => n + c.revenue, 0)) : ""}
           />

@@ -11,6 +11,9 @@
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:3333";
 
+/** Must match MAX_PAGE_SIZE in the backend's common/serialization/pagination.ts. */
+export const MAX_PAGE_SIZE = 200;
+
 const TOKEN_KEY = "admin_token";
 const USER_KEY = "admin_user";
 
@@ -44,6 +47,20 @@ export function setStoredUser(user: import("./types").CurrentAdminUser | null): 
 export interface ApiError {
   message: string;
   status?: number;
+}
+
+/** Mirrors the backend's PaginatedResponse<T> (common/serialization/pagination.ts). */
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+  page: number;
+  hasMore: boolean;
+}
+
+export interface ProductFacets {
+  total: number;
+  byStatus: Record<"publie" | "brouillon" | "archive", number>;
+  byCategory: { categoryId: string; count: number }[];
 }
 
 export interface MediaItem {
@@ -126,7 +143,27 @@ export const adminApi = {
   },
 
   products: {
-    list: (qs = "") => api.get(`/admin/products${qs}`),
+    list: <T>(qs = "") => api.get<Paginated<T>>(`/admin/products${qs}`),
+    /** Catalogue-wide counts for filter chips, independent of the current page. */
+    facets: (q = "") =>
+      api.get<ProductFacets>(
+        `/admin/products/facets${q ? `?q=${encodeURIComponent(q)}` : ""}`,
+      ),
+    /**
+     * Every product, walking pages until the server says there are no more.
+     * For option pickers that need the whole catalogue — never hardcode a limit,
+     * or the list silently truncates once the catalogue outgrows it.
+     */
+    async listAll<T>(): Promise<T[]> {
+      const all: T[] = [];
+      for (let page = 1; ; page++) {
+        const res = await api.get<Paginated<T>>(
+          `/admin/products?page=${page}&limit=${MAX_PAGE_SIZE}`,
+        );
+        all.push(...(res?.items ?? []));
+        if (!res?.hasMore || !res.items?.length) return all;
+      }
+    },
     get: (id: string) => api.get(`/admin/products/${id}`),
     create: (body: unknown) => api.post("/admin/products", body),
     update: (id: string, body: unknown) => api.put(`/admin/products/${id}`, body),
@@ -149,7 +186,7 @@ export const adminApi = {
     remove: (id: string) => api.delete(`/admin/promo-codes/${id}`),
   },
   orders: {
-    list: (qs = "") => api.get(`/admin/orders${qs}`),
+    list: <T>(qs = "") => api.get<Paginated<T>>(`/admin/orders${qs}`),
     /** Downloads the orders export as CSV and triggers a browser download. */
     async export(): Promise<void> {
       const token = getToken();

@@ -27,10 +27,10 @@ export default function CategoryFeaturedPicker({ categoryId }: { categoryId: str
   const load = useCallback(async () => {
     const [f, p] = await Promise.all([
       adminApi.featured.products(categoryId) as Promise<FeaturedProduct[]>,
-      adminApi.products.list("?page=1&limit=200") as Promise<{ items: ProductOption[] }>,
+      adminApi.products.listAll<ProductOption>(),
     ]);
     setFeatured(f ?? []);
-    setAllProducts(p?.items ?? []);
+    setAllProducts(p ?? []);
   }, [categoryId]);
 
   useEffect(() => {

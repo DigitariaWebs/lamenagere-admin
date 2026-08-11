@@ -111,10 +111,10 @@ export default function PromoCodesPage() {
   async function load() {
     const [list, prods] = await Promise.all([
       adminApi.promoCodes.list() as Promise<AdminPromoCode[]>,
-      adminApi.products.list("?page=1&limit=200") as Promise<{ items: ProductOption[] }>,
+      adminApi.products.listAll<ProductOption>(),
     ]);
     setCodes(list ?? []);
-    setProducts(prods?.items ?? []);
+    setProducts(prods ?? []);
   }
 
   useEffect(() => {
