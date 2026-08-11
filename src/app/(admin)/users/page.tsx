@@ -6,13 +6,13 @@ import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import { AdminUser, AdminRole, ADMIN_ROLE_LABELS } from "@/lib/types";
 import { useCurrentUser } from "@/lib/user-context";
+import { GRANTABLE_ROLES, ROLE_DOCS } from "@/lib/roles";
+import { RolePermissions } from "@/components/users/RolePermissions";
 
-const ROLE_OPTIONS: { value: AdminRole; label: string }[] = [
-  { value: "admin", label: "Admin" },
-  { value: "manager", label: "Manager" },
-  { value: "editor", label: "Éditeur" },
-  { value: "support", label: "Support" },
-];
+const ROLE_OPTIONS: { value: AdminRole; label: string }[] = GRANTABLE_ROLES.map((value) => ({
+  value,
+  label: ADMIN_ROLE_LABELS[value],
+}));
 
 const ROLE_PILL: Record<AdminRole, string> = {
   super_admin: "pill pill-navy",
@@ -24,7 +24,7 @@ const ROLE_PILL: Record<AdminRole, string> = {
 
 function RoleBadge({ role }: { role: AdminRole }) {
   return (
-    <span className={ROLE_PILL[role] ?? "pill pill-outline"}>
+    <span className={ROLE_PILL[role] ?? "pill pill-outline"} title={ROLE_DOCS[role]?.summary}>
       {ADMIN_ROLE_LABELS[role] ?? role}
     </span>
   );
@@ -195,7 +195,26 @@ export default function UsersPage() {
                 </div>
               </div>
 
-              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              {/* Rappel de ce que le rôle sélectionné autorise */}
+              <p
+                style={{
+                  fontSize: 12,
+                  lineHeight: 1.55,
+                  color: "var(--on-surface-variant)",
+                  background: "var(--surface-container-low)",
+                  border: "1px solid var(--outline-soft)",
+                  borderRadius: 8,
+                  padding: "10px 12px",
+                  margin: "4px 0 0",
+                }}
+              >
+                <strong style={{ color: "var(--on-surface)" }}>
+                  {ADMIN_ROLE_LABELS[form.role]} —{" "}
+                </strong>
+                {ROLE_DOCS[form.role].summary}
+              </p>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
                 <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
                   {saving ? "Création…" : "Créer le compte"}
                 </button>
@@ -211,6 +230,9 @@ export default function UsersPage() {
           </div>
         </div>
       )}
+
+      {/* ── Rôles & permissions ── */}
+      <RolePermissions />
 
       {/* ── Users table ── */}
       <div className="card">

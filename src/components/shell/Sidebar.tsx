@@ -7,15 +7,8 @@ import { NAV, getActiveKey } from "@/lib/nav";
 import { supabase } from "@/lib/supabase";
 import { setToken, setStoredUser } from "@/lib/api";
 import { useCurrentUser } from "@/lib/user-context";
-import { AdminRole, ADMIN_ROLE_LABELS } from "@/lib/types";
-
-const ROLE_NAV_KEYS: Record<AdminRole, string[]> = {
-  super_admin: ["dashboard", "analytics", "products", "orders", "quotes", "messages", "tickets", "customers", "categories", "featured", "popups", "promoCodes", "campaigns", "settings", "users", "activity"],
-  admin: ["dashboard", "analytics", "products", "orders", "quotes", "messages", "tickets", "customers", "categories", "featured", "popups", "promoCodes", "campaigns", "activity"],
-  manager: ["dashboard", "orders", "quotes", "messages", "tickets", "customers"],
-  editor: ["dashboard", "products", "categories", "featured", "popups", "campaigns"],
-  support: ["dashboard", "messages", "tickets", "customers"],
-};
+import { ADMIN_ROLE_LABELS } from "@/lib/types";
+import { ROLE_NAV_KEYS } from "@/lib/roles";
 
 export function Sidebar() {
   const pathname = usePathname();
