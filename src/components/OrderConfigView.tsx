@@ -203,10 +203,30 @@ export function OrderConfigView({ config }: { config?: ConfigEntry[] }) {
   const shapeKey = entries.find((e) => e.shape)?.shape?.key;
   const runs = shapeKey === "u" ? 3 : shapeKey === "l" ? 2 : 1;
 
+  // The colourway and the gamme identify the product itself, so they lead —
+  // the server appends them last, which buried them under ten option cards.
+  const LEAD = ["product-color", "quality-tier"];
+  const ordered = [...entries].sort(
+    (a, b) => LEAD.indexOf(b.blockId) - LEAD.indexOf(a.blockId),
+  );
+
   return (
     <div className="stack">
-      {entries.map((e, i) => {
+      {ordered.map((e, i) => {
         const key = `${e.blockId}-${i}`;
+
+        if (e.blockId === "quality-tier") {
+          return (
+            <Card key={key} title={e.label}>
+              <div style={{ fontSize: 26, fontFamily: "var(--display)", color: "var(--primary)" }}>
+                {e.options?.map((o) => o.label).join(", ")}
+              </div>
+              <div className="field-hint" style={{ marginTop: 4 }}>
+                Détermine le prix au m² appliqué à cette ligne.
+              </div>
+            </Card>
+          );
+        }
 
         if (e.shape) {
           return (
