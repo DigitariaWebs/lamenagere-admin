@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Images, Plus, X } from "lucide-react";
+import { AlertCircle, Camera, Images, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import MediaLibrary from "./MediaLibrary";
@@ -30,9 +30,12 @@ export function makeColor(): ColorEntry {
 export default function ProductColorsEditor({
   colors,
   onChange,
+  errors = {},
 }: {
   colors: ColorEntry[];
   onChange: (next: ColorEntry[]) => void;
+  /** `color-name-<index>` → message, supplied by the product form validator. */
+  errors?: Record<string, string>;
 }) {
   function addColor() {
     onChange([...colors, makeColor()]);
@@ -51,35 +54,42 @@ export default function ProductColorsEditor({
       {colors.map((color, i) => (
         <ColorRow
           key={i}
+          index={i}
           color={color}
+          error={errors[`color-name-${i}`]}
           onPatch={(p) => patchColor(i, p)}
           onRemove={() => removeColor(i)}
         />
       ))}
       <button
         type="button"
-        className="btn btn-ghost"
+        className="btn btn-outline btn-sm"
         onClick={addColor}
         style={{ alignSelf: "flex-start" }}
       >
-        <Plus size={16} strokeWidth={1.8} />
-        <span>Ajouter une couleur</span>
+        <Plus size={14} strokeWidth={1.8} />
+        <span>Ajouter un coloris</span>
       </button>
     </div>
   );
 }
 
 function ColorRow({
+  index,
   color,
+  error,
   onPatch,
   onRemove,
 }: {
+  index: number;
   color: ColorEntry;
+  error?: string;
   onPatch: (p: Partial<ColorEntry>) => void;
   onRemove: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [libOpen, setLibOpen] = useState(false);
+  const nameId = `color-name-${index}`;
 
   function addImages(urls: string[]) {
     const merged = [...color.images];
@@ -106,15 +116,19 @@ function ColorRow({
         border: "1px solid var(--outline-variant)",
         borderRadius: 12,
         padding: 16,
-        background: "var(--surface-container-lowest)",
+        background: "var(--surface)",
       }}
     >
       <div className="hstack" style={{ gap: 12, alignItems: "flex-end" }}>
         <div className="field" style={{ flex: 1 }}>
-          <label className="field-label">Nom de la couleur</label>
+          <label className="field-label" htmlFor={nameId}>
+            Nom du coloris
+          </label>
           <input
-            className="input"
+            id={nameId}
+            className={error ? "input invalid" : "input"}
             placeholder="ex. Blanc cassé"
+            aria-invalid={error ? true : undefined}
             value={color.name}
             onChange={(e) => {
               const name = e.target.value;
@@ -124,11 +138,14 @@ function ColorRow({
             }}
           />
         </div>
-        <div className="field" style={{ width: 120 }}>
-          <label className="field-label">Teinte</label>
+        <div className="field" style={{ width: 130 }}>
+          <label className="field-label" htmlFor={`color-hex-${index}`}>
+            Teinte
+          </label>
           <div className="hstack" style={{ gap: 8, alignItems: "center" }}>
             <input
               type="color"
+              aria-label={`Sélecteur de teinte du coloris ${index + 1}`}
               value={/^#[0-9a-fA-F]{6}$/.test(color.hex) ? color.hex : "#000000"}
               onChange={(e) => onPatch({ hex: e.target.value })}
               style={{
@@ -139,11 +156,13 @@ function ColorRow({
                 borderRadius: 8,
                 background: "none",
                 cursor: "pointer",
+                flexShrink: 0,
               }}
             />
             <input
+              id={`color-hex-${index}`}
               className="input mono"
-              style={{ width: 76 }}
+              style={{ width: 82 }}
               value={color.hex}
               onChange={(e) => onPatch({ hex: e.target.value })}
             />
@@ -151,89 +170,50 @@ function ColorRow({
         </div>
         <button
           type="button"
-          className="btn btn-ghost"
+          className="icon-btn"
           onClick={onRemove}
-          aria-label="Retirer la couleur"
-          style={{ marginBottom: 2 }}
+          aria-label={`Retirer le coloris ${index + 1}`}
+          style={{ color: "var(--error)", marginBottom: 2 }}
         >
-          <X size={16} />
+          <Trash2 size={16} />
         </button>
       </div>
 
-      <div style={{ marginTop: 14 }}>
-        <label className="field-label" style={{ display: "block", marginBottom: 8 }}>
-          Images de cette couleur
-        </label>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10 }}>
-          {color.images.map((url) => (
-            <div
-              key={url}
-              style={{
-                aspectRatio: "1",
-                borderRadius: 10,
-                background: `url(${url}) center/cover`,
-                position: "relative",
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => onPatch({ images: color.images.filter((u) => u !== url) })}
-                style={{
-                  position: "absolute",
-                  top: 5,
-                  right: 5,
-                  width: 20,
-                  height: 20,
-                  borderRadius: "50%",
-                  background: "rgba(0,0,0,0.6)",
-                  color: "#fff",
-                  border: "none",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <X size={11} />
-              </button>
+      {error && (
+        <div className="field-error" role="alert" style={{ marginTop: 6 }}>
+          <AlertCircle size={13} strokeWidth={2} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div style={{ marginTop: 16 }}>
+        <div className="field-label" style={{ marginBottom: 8 }}>
+          Photos de ce coloris
+        </div>
+        <div className="media-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))" }}>
+          {color.images.map((url, i) => (
+            <div key={url} className="media-tile">
+              <img src={url} alt={`Photo ${i + 1} du coloris ${color.name || index + 1}`} />
+              <div className="mt-bar">
+                <button
+                  type="button"
+                  className="mt-btn danger"
+                  aria-label={`Supprimer la photo ${i + 1} de ce coloris`}
+                  onClick={() => onPatch({ images: color.images.filter((u) => u !== url) })}
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
             </div>
           ))}
-          <div
-            onClick={() => fileRef.current?.click()}
-            style={{
-              aspectRatio: "1",
-              borderRadius: 10,
-              background: "var(--surface-container-low)",
-              border: "1.5px dashed var(--outline-variant)",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "var(--outline)",
-              cursor: "pointer",
-            }}
-          >
-            <Plus size={20} strokeWidth={1.6} />
-            <div style={{ fontSize: 9, marginTop: 4 }}>Ajouter</div>
-          </div>
-          <div
-            onClick={() => setLibOpen(true)}
-            style={{
-              aspectRatio: "1",
-              borderRadius: 10,
-              background: "var(--surface-container-low)",
-              border: "1.5px dashed var(--outline-variant)",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "var(--outline)",
-              cursor: "pointer",
-            }}
-          >
-            <Images size={20} strokeWidth={1.6} />
-            <div style={{ fontSize: 9, marginTop: 4 }}>Bibliothèque</div>
-          </div>
+          <button type="button" className="media-add" onClick={() => fileRef.current?.click()}>
+            <Camera size={18} strokeWidth={1.6} />
+            <span>Téléverser</span>
+          </button>
+          <button type="button" className="media-add" onClick={() => setLibOpen(true)}>
+            <Images size={18} strokeWidth={1.6} />
+            <span>Bibliothèque</span>
+          </button>
         </div>
         <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={onPickImages} />
         <MediaLibrary

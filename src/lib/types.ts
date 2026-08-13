@@ -56,24 +56,6 @@ export interface CurrentAdminUser {
 export type ProductType = "standard" | "configurable" | "quote_only";
 export type PriceMode = "fixed" | "calculated" | "per_sqm" | "quote";
 
-export type OpeningTypeKey =
-  | "battante"
-  | "pivotante"
-  | "coulissante"
-  | "oscillo_battante"
-  | "soufflet"
-  | "fixe"
-  | "double_battant";
-
-export const OPENING_TYPES: Record<OpeningTypeKey, string> = {
-  battante: "Battante",
-  pivotante: "Pivotante",
-  coulissante: "Coulissante",
-  oscillo_battante: "Oscillo-battante",
-  soufflet: "Soufflet",
-  fixe: "Fixe",
-  double_battant: "Double battant",
-};
 export type ShippingZone =
   | "metropole"
   | "reunion"
