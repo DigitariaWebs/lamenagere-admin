@@ -14,6 +14,41 @@ export interface FieldError {
 }
 
 /**
+ * What "Le client choisit la forme" needs in order to price at all: a Forme
+ * block to pick from, one measurement tagged as the first pan, and one tagged
+ * as the height. Missing any of them, `dimensionsFromShape` returns a surface
+ * of zero and checkout refuses the order.
+ *
+ * Returns the sentence to show the admin, or null when the setup is sound.
+ */
+export function byShapeSetupIssue(state: FormState): string | null {
+  const { form, blocks, overrideBlocks, categories } = state;
+  if (form.priceKind !== "sqm" || form.areaFormula !== "by_shape") return null;
+
+  const effective = overrideBlocks
+    ? blocks
+    : (categories.find((c) => c.id === form.categoryId)?.configBlocks ?? []);
+  // Nothing to judge yet: no category chosen means no template to inherit.
+  if (!overrideBlocks && !form.categoryId) return null;
+
+  const missing: string[] = [];
+  if (!effective.some((b) => b.type === "shape" && (b.options ?? []).length > 0)) {
+    missing.push("un bloc « Forme » avec au moins une forme cochée");
+  }
+  const fields = effective
+    .filter((b) => b.type === "measurements")
+    .flatMap((b) => b.fields ?? []);
+  if (!fields.some((f) => f.priceRole === "run1")) {
+    missing.push("une mesure taguée « Pan 1 »");
+  }
+  if (!fields.some((f) => f.priceRole === "height")) {
+    missing.push("une mesure taguée « Hauteur »");
+  }
+  if (!missing.length) return null;
+  return `Il manque ${missing.join(", ")}. Sans cela la surface vaut zéro et le client ne pourra pas commander.`;
+}
+
+/**
  * Rows that used to be dropped in silence at save time (a tier without a rate,
  * a colour without a name) are reported here instead — the admin typed them, so
  * losing them without a word is worse than refusing to save.
@@ -82,6 +117,16 @@ export function validate(state: FormState): FieldError[] {
         });
       }
     });
+
+    // A broken by_shape setup can be saved as a draft, but never published:
+    // a published product must be orderable.
+    if (form.status === "publie" && byShapeSetupIssue(state)) {
+      errors.push({
+        field: "areaFormula",
+        tab: "prix",
+        message: byShapeSetupIssue(state)!,
+      });
+    }
 
     const minW = num(form.minWidth);
     const maxW = num(form.maxWidth);

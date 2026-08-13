@@ -9,11 +9,27 @@ import {
 import { Callout } from "./SectionHead";
 
 /**
- * The formula decides which measurements the customer is asked for and how they
- * become a billable surface — a geometry choice. It used to be a native
- * `<select>` of five sentences like "(Gauche + Fond + Droite) × Hauteur — en U",
- * so each option now carries a diagram of the shape it bills.
+ * Only two answers are ever needed: does the product have one fixed shape, or
+ * does the customer pick it?
+ *
+ * The engine still knows five formulas, but `width_length`, `l_shape` and
+ * `u_shape` are proposed nowhere — no product used them, and the last two
+ * duplicate "piloted by the shape" with the choice taken away. Legacy values
+ * still resolve, they just aren't offered.
  */
+const PRODUCT_FORMULAS: AreaFormulaKey[] = ["width_height", "by_shape"];
+
+/** Plain-language framing of each formula, in place of its maths. */
+const COPY: Partial<Record<AreaFormulaKey, { title: string; hint: string }>> = {
+  width_height: {
+    title: "Forme fixe",
+    hint: "Le produit n'a qu'une forme. Le client saisit sa largeur et sa hauteur. Portes, baies, volets, meubles.",
+  },
+  by_shape: {
+    title: "Le client choisit la forme",
+    hint: "I, L ou U. La forme décide combien de pans sont facturés, et les mesures viennent des blocs de configuration. Cuisines, dressings, canapés d'angle.",
+  },
+};
 function Figure({ formula }: { formula: AreaFormulaKey }) {
   const common = {
     width: 76,
@@ -78,9 +94,12 @@ function Figure({ formula }: { formula: AreaFormulaKey }) {
 export function AreaFormulaPicker({
   value,
   onChange,
+  allow = PRODUCT_FORMULAS,
 }: {
   value: AreaFormulaKey;
   onChange: (key: AreaFormulaKey) => void;
+  /** Which formulas to propose. Defaults to the two used by real products. */
+  allow?: AreaFormulaKey[];
 }) {
   // Resolves legacy/unknown keys to the historical width × height instead of
   // crashing on an undefined definition.
@@ -89,7 +108,7 @@ export function AreaFormulaPicker({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div className="choice-grid" role="radiogroup" aria-label="Formule de calcul de la surface">
-        {AREA_FORMULA_KEYS.map((key) => {
+        {AREA_FORMULA_KEYS.filter((k) => allow.includes(k)).map((key) => {
           const f = AREA_FORMULAS[key];
           const active = key === def.key;
           return (
@@ -104,8 +123,8 @@ export function AreaFormulaPicker({
               <span className="cc-fig">
                 <Figure formula={key} />
               </span>
-              <span className="cc-title">{f.label}</span>
-              <span className="cc-hint">{f.hint}</span>
+              <span className="cc-title">{COPY[key]?.title ?? f.label}</span>
+              <span className="cc-hint">{COPY[key]?.hint ?? f.hint}</span>
             </button>
           );
         })}

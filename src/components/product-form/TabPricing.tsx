@@ -38,11 +38,14 @@ export function TabPricing({
   patch,
   errors,
   onPriceKindChange,
+  setupIssue,
 }: {
   form: Form;
   patch: (p: Partial<Form>) => void;
   errors: Record<string, string>;
   onPriceKindChange: (kind: PriceKind) => void;
+  /** What "le client choisit la forme" still needs, if anything. */
+  setupIssue?: string | null;
 }) {
   const tiers = form.qualityTiers;
 
@@ -213,6 +216,14 @@ export function TabPricing({
               value={form.areaFormula}
               onChange={(areaFormula: AreaFormulaKey) => patch({ areaFormula })}
             />
+            {setupIssue && (
+              <div style={{ marginTop: 12 }}>
+                <Callout kind="warn">
+                  <strong>Configuration incomplète.</strong> {setupIssue} Le produit reste
+                  enregistrable en brouillon, mais pas publiable.
+                </Callout>
+              </div>
+            )}
           </div>
 
           <div className="card card-padded">

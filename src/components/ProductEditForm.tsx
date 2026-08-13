@@ -15,7 +15,7 @@ import { TabPricing } from "./product-form/TabPricing";
 import { TabMedia } from "./product-form/TabMedia";
 import { TabConfiguration } from "./product-form/TabConfiguration";
 import { TabLogistics } from "./product-form/TabLogistics";
-import { errorMap, errorsByTab, validate } from "./product-form/validate";
+import { byShapeSetupIssue, errorMap, errorsByTab, validate } from "./product-form/validate";
 import {
   cents,
   EMPTY,
@@ -512,6 +512,7 @@ export function ProductEditForm({ mode = "edit" }: { mode?: Mode }) {
               patch={patch}
               errors={errorsFor}
               onPriceKindChange={requestPriceKind}
+              setupIssue={byShapeSetupIssue(state)}
             />
           )}
           {tab === "medias" && (

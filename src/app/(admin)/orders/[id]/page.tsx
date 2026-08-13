@@ -1,11 +1,11 @@
 "use client";
 
 import { formatEnteredDimensions, type AreaDimensions } from "@/lib/area-formulas";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
-import { Truck, ArrowRight, Check } from "lucide-react";
+import { Truck, ArrowRight, Check, Eye } from "lucide-react";
 import { adminApi } from "@/lib/api";
 import { formatEUR } from "@/lib/format";
 
@@ -32,10 +32,120 @@ interface ConfigEntry {
   label: string;
   measurements?: { label: string; value: number; unit?: string }[];
   shape?: { label: string };
-  colors?: { label: string }[];
+  colors?: { label: string; surchargeCents?: number }[];
   accessories?: { title: string; priceCents?: number }[];
-  opening?: { label: string };
+  opening?: { label: string; surchargeCents?: number };
+  options?: { label: string; surchargeCents?: number }[];
   photos?: { url: string; type: string }[];
+  ilot?: { included: boolean; surchargeCents?: number };
+}
+
+interface RecapRow {
+  label: string;
+  value: string;
+  priceCents?: number;
+  sub?: boolean;
+}
+
+/**
+ * The configuration read back block by block. The previous one-line summary
+ * joined everything with " · " into 11px grey text, and silently skipped
+ * `options` and `ilot` entries — so an option the customer picked, or an island
+ * they paid for, appeared nowhere in the back office.
+ */
+function configRecapRows(config?: ConfigEntry[]): RecapRow[] {
+  const rows: RecapRow[] = [];
+  const sum = (xs: { surchargeCents?: number }[]) =>
+    xs.reduce((n, x) => n + (x.surchargeCents ?? 0), 0);
+
+  for (const e of config ?? []) {
+    const measurements = e.measurements ?? [];
+    const detail = () =>
+      measurements.forEach((m) =>
+        rows.push({ label: m.label, value: `${m.value} ${m.unit ?? "cm"}`, sub: true }),
+      );
+
+    if (e.type === "ilot") {
+      if (!e.ilot?.included) continue;
+      rows.push({ label: e.label, value: "Oui", priceCents: e.ilot.surchargeCents });
+      detail();
+    } else if (e.type === "measurements") {
+      if (!measurements.length) continue;
+      rows.push({ label: e.label, value: "" });
+      detail();
+    } else if (e.shape) {
+      rows.push({ label: e.label, value: e.shape.label });
+    } else if (e.colors?.length) {
+      rows.push({
+        label: e.label,
+        value: e.colors.map((c) => c.label).join(", "),
+        priceCents: sum(e.colors),
+      });
+    } else if (e.opening) {
+      rows.push({ label: e.label, value: e.opening.label, priceCents: e.opening.surchargeCents });
+    } else if (e.accessories?.length) {
+      rows.push({
+        label: e.label,
+        value: e.accessories.map((a) => a.title.trim()).join(", "),
+        priceCents: e.accessories.reduce((n, a) => n + (a.priceCents ?? 0), 0),
+      });
+    } else if (e.options?.length) {
+      rows.push({
+        label: e.label,
+        value: e.options.map((o) => o.label).join(", "),
+        priceCents: sum(e.options),
+      });
+    } else if (e.photos?.length) {
+      rows.push({
+        label: e.label,
+        value: `${e.photos.length} fichier${e.photos.length > 1 ? "s" : ""}`,
+      });
+    }
+  }
+  return rows;
+}
+
+function ConfigRecap({ config }: { config?: ConfigEntry[] }) {
+  const rows = configRecapRows(config);
+  if (!rows.length) return null;
+  return (
+    <table style={{ marginTop: 8, borderCollapse: "collapse", width: "100%", maxWidth: 520 }}>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={`${r.label}-${i}`}>
+            <td
+              style={{
+                padding: "3px 10px 3px 0",
+                fontSize: 12,
+                fontWeight: r.sub ? 400 : 600,
+                color: r.sub ? "var(--outline)" : "var(--on-surface)",
+                paddingLeft: r.sub ? 14 : 0,
+                whiteSpace: "nowrap",
+                verticalAlign: "top",
+              }}
+            >
+              {r.label}
+            </td>
+            <td style={{ padding: "3px 10px 3px 0", fontSize: 12, color: "var(--on-surface-variant)" }}>
+              {r.value}
+            </td>
+            <td
+              style={{
+                padding: "3px 0",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "var(--secondary)",
+                textAlign: "right",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {r.priceCents ? `+ ${formatEUR(r.priceCents / 100)}` : ""}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 }
 interface OrderItem {
   id: string;
@@ -46,18 +156,6 @@ interface OrderItem {
   configuration?: ConfigEntry[];
 }
 
-function summarizeConfig(config?: ConfigEntry[]): string {
-  if (!config?.length) return "";
-  const parts: string[] = [];
-  for (const e of config) {
-    if (e.measurements?.length) parts.push(e.measurements.map((m) => `${m.label} ${m.value}${m.unit ?? ""}`).join(", "));
-    if (e.shape) parts.push(e.shape.label);
-    if (e.colors?.length) parts.push(e.colors.map((c) => c.label).join("/"));
-    if (e.opening) parts.push(e.opening.label);
-    if (e.accessories?.length) parts.push(e.accessories.map((a) => a.title).join(", "));
-  }
-  return parts.join(" · ");
-}
 function configPhotos(config?: ConfigEntry[]): string[] {
   if (!config?.length) return [];
   return config.flatMap((e) => (e.photos ?? []).filter((p) => p.type !== "video").map((p) => p.url));
@@ -280,31 +378,95 @@ export default function OrderDetailPage() {
                 </thead>
                 <tbody>
                   {o.items.map((it) => {
-                    const summary = summarizeConfig(it.configuration);
                     const photos = configPhotos(it.configuration);
+                    const rows = configRecapRows(it.configuration);
+                    const supplements = rows.reduce((n, r) => n + (r.priceCents ?? 0), 0);
+                    const w = it.customDimensions?.width;
+                    const h = it.customDimensions?.height;
+                    // Both formulas actually in use bill width × height, so this
+                    // is the surface the unit price was computed on.
+                    const sqm = w && h ? (w * h) / 10000 : null;
                     return (
-                      <tr key={it.id}>
-                        <td>
-                          <div className="hstack" style={{ gap: 14 }}>
-                            {it.product.images?.[0] && <div className="thumb" style={{ backgroundImage: `url(${it.product.images[0]})` }}></div>}
-                            <div>
+                      <Fragment key={it.id}>
+                        <tr>
+                          <td>
+                            <div className="hstack" style={{ gap: 14 }}>
+                              {it.product.images?.[0] && <div className="thumb" style={{ backgroundImage: `url(${it.product.images[0]})` }}></div>}
                               <div style={{ fontWeight: 500 }}>{it.product.name}</div>
-                              {summary && <div style={{ fontSize: 11.5, color: "var(--outline)", marginTop: 2 }}>{summary}</div>}
-                              {photos.length > 0 && (
-                                <div className="hstack" style={{ gap: 6, marginTop: 6 }}>
-                                  {photos.map((url, i) => (
-                                    <a key={i} href={url} target="_blank" rel="noreferrer" style={{ width: 40, height: 40, borderRadius: 6, background: `url(${url}) center/cover`, display: "block", border: "1px solid var(--outline-soft)" }} />
-                                  ))}
+                            </div>
+                          </td>
+                          <td>
+                            {sqm ? (
+                              <>
+                                <div style={{ fontSize: 12.5, fontWeight: 600 }}>
+                                  {sqm.toFixed(2)} m² facturés
+                                </div>
+                                <div style={{ fontSize: 11, color: "var(--outline)" }}>
+                                  {formatEnteredDimensions(it.customDimensions!)}
+                                </div>
+                              </>
+                            ) : (
+                              <span style={{ fontSize: 12.5, color: "var(--outline)" }}>—</span>
+                            )}
+                          </td>
+                          <td style={{ textAlign: "center" }}>{it.quantity}</td>
+                          <td style={{ textAlign: "right" }} className="num">{formatEUR(it.price)}</td>
+                          <td style={{ textAlign: "right" }} className="num">{formatEUR(it.price * it.quantity)}</td>
+                        </tr>
+                        {(rows.length > 0 || photos.length > 0) && (
+                          <tr>
+                            {/* Full width: the configuration is what the workshop
+                                builds from, it must not be squeezed into a cell. */}
+                            <td colSpan={5} style={{ background: "var(--surface-container-low)" }}>
+                              <div
+                                className="hstack"
+                                style={{ justifyContent: "space-between", marginBottom: 10, gap: 12 }}
+                              >
+                                <span className="eyebrow">Configuration choisie par le client</span>
+                                <Link
+                                  href={`/orders/${o.id}/items/${it.id}`}
+                                  className="btn btn-outline btn-sm"
+                                >
+                                  <Eye size={14} />
+                                  <span>Voir en détail</span>
+                                </Link>
+                              </div>
+                              <ConfigRecap config={it.configuration} />
+                              {supplements > 0 && (
+                                <div
+                                  style={{
+                                    marginTop: 10,
+                                    fontSize: 12,
+                                    color: "var(--on-surface-variant)",
+                                  }}
+                                >
+                                  Suppléments inclus dans le prix unitaire :{" "}
+                                  <strong>{formatEUR(supplements / 100)}</strong>
                                 </div>
                               )}
-                            </div>
-                          </div>
-                        </td>
-                        <td><span style={{ fontSize: 12.5 }}>{it.customDimensions ? formatEnteredDimensions(it.customDimensions) : "—"}</span></td>
-                        <td style={{ textAlign: "center" }}>{it.quantity}</td>
-                        <td style={{ textAlign: "right" }} className="num">{formatEUR(it.price)}</td>
-                        <td style={{ textAlign: "right" }} className="num">{formatEUR(it.price * it.quantity)}</td>
-                      </tr>
+                              {photos.length > 0 && (
+                                <>
+                                  <div className="eyebrow" style={{ margin: "16px 0 8px" }}>
+                                    Photos envoyées par le client
+                                  </div>
+                                  <div className="hstack" style={{ gap: 8, flexWrap: "wrap" }}>
+                                    {photos.map((url, i) => (
+                                      <a
+                                        key={i}
+                                        href={url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        title="Ouvrir en grand"
+                                        style={{ width: 72, height: 72, borderRadius: 8, background: `url(${url}) center/cover`, display: "block", border: "1px solid var(--outline-variant)" }}
+                                      />
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     );
                   })}
                 </tbody>

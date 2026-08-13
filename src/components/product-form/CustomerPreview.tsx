@@ -31,11 +31,18 @@ function buildJourney(state: FormState): Step[] {
   const { form, blocks, overrideBlocks, categories } = state;
   const steps: Step[] = [];
 
-  const effectiveBlocks: ConfigBlock[] = overrideBlocks
-    ? blocks
-    : form.priceKind === "sqm"
-      ? (categories.find((c) => c.id === form.categoryId)?.configBlocks ?? [])
-      : [];
+  const effectiveBlocks: ConfigBlock[] = (
+    overrideBlocks
+      ? blocks
+      : form.priceKind === "sqm"
+        ? (categories.find((c) => c.id === form.categoryId)?.configBlocks ?? [])
+        : []
+  ).filter((b) => {
+    const a = b.appliesTo ?? "all";
+    if (a === "sqm") return form.priceKind === "sqm";
+    if (a === "fixed") return form.priceKind === "fixed";
+    return true;
+  });
 
   if (form.priceKind === "fixed" && !overrideBlocks) {
     const stock = int(form.stockQty);

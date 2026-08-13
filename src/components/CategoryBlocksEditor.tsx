@@ -1,13 +1,11 @@
 "use client";
 import {
   AREA_FORMULAS,
-  AREA_FORMULA_KEYS,
   DIMENSION_ROLES,
   type AreaDimensionKey,
   type AreaFormulaKey,
   type DimensionRole,
 } from "@/lib/area-formulas";
-import { AreaFormulaPicker } from "./product-form/AreaFormulaPicker";
 
 import { useEffect, useState } from "react";
 import {
@@ -74,11 +72,26 @@ export interface ConfigBlockItem {
   image?: string;
   priceCents?: number;
 }
+/** Which products of a category a block is meant for. */
+export type BlockAudience = "all" | "sqm" | "fixed";
+
+const AUDIENCES: { key: BlockAudience; label: string }[] = [
+  { key: "all", label: "Tous" },
+  { key: "sqm", label: "Au m²" },
+  { key: "fixed", label: "Prix fixe" },
+];
+
 export interface ConfigBlock {
   id: string;
   type: ConfigBlockType;
   label: string;
   required?: boolean;
+  /**
+   * One template has to serve a family sold both from catalogue and made to
+   * measure, so a block asking for the customer's own dimensions can be limited
+   * to per-m² products. Absent means every product.
+   */
+  appliesTo?: BlockAudience;
   multiple?: boolean;
   helpText?: string;
   planImage?: string;
@@ -97,19 +110,13 @@ export interface ConfigBlock {
 }
 
 /**
- * Every dimension any formula can ask for, with the label the customer sees.
- * Derived from the formulas themselves so the three copies of `area-formulas`
- * stay identical across server / app / back office.
+ * An island is a box standing in the room: what it costs follows its footprint,
+ * so its formula is fixed to Largeur × Longueur and the admin only says which
+ * of its measurements is which. One less thing to get wrong.
  */
-const DIMENSION_CHOICES: { key: AreaDimensionKey; label: string }[] = (() => {
-  const seen = new Map<AreaDimensionKey, string>();
-  for (const k of AREA_FORMULA_KEYS) {
-    for (const f of AREA_FORMULAS[k].fields) {
-      if (!seen.has(f.key)) seen.set(f.key, f.label);
-    }
-  }
-  return [...seen].map(([key, label]) => ({ key, label }));
-})();
+const ILOT_FORMULA: AreaFormulaKey = "width_length";
+const DIMENSION_CHOICES: { key: AreaDimensionKey; label: string }[] =
+  AREA_FORMULAS[ILOT_FORMULA].fields.map((f) => ({ key: f.key, label: f.label }));
 
 export const BLOCK_META: Record<
   ConfigBlockType,
@@ -175,7 +182,7 @@ export default function CategoryBlocksEditor({ blocks, onChange }: Props) {
       base.fields = [];
       base.priceMode = "fixed";
       base.priceCents = 0;
-      base.areaFormula = "width_length";
+      base.areaFormula = ILOT_FORMULA;
     }
     else if (type === "shape") {
       // The three shapes are the whole vocabulary — offer them all and let the
@@ -258,6 +265,11 @@ export default function CategoryBlocksEditor({ blocks, onChange }: Props) {
                     Obligatoire
                   </span>
                 )}
+                {b.appliesTo && b.appliesTo !== "all" && (
+                  <span className="pill pill-bronze-soft" style={{ fontSize: 9 }}>
+                    {b.appliesTo === "sqm" ? "Au m² seulement" : "Prix fixe seulement"}
+                  </span>
+                )}
               </button>
               <div className="blk-actions">
                 <button
@@ -302,6 +314,29 @@ export default function CategoryBlocksEditor({ blocks, onChange }: Props) {
                     value={b.label}
                     onChange={(e) => update(b.id, { label: e.target.value })}
                   />
+                </div>
+
+                <div className="field">
+                  <div className="field-label">Afficher pour</div>
+                  <div className="seg" style={{ marginTop: 6, alignSelf: "flex-start" }}>
+                    {AUDIENCES.map((a) => (
+                      <button
+                        key={a.key}
+                        type="button"
+                        className={`seg-btn${(b.appliesTo ?? "all") === a.key ? " active" : ""}`}
+                        onClick={() => update(b.id, { appliesTo: a.key })}
+                      >
+                        {a.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="field-hint">
+                    {(b.appliesTo ?? "all") === "sqm"
+                      ? "Visible seulement sur les produits vendus au m²."
+                      : (b.appliesTo ?? "all") === "fixed"
+                        ? "Visible seulement sur les produits à prix fixe."
+                        : "Visible sur tous les produits de la catégorie."}
+                  </div>
                 </div>
 
                 <label
@@ -662,7 +697,9 @@ function IlotBody({ block, update }: { block: ConfigBlock; update: (p: Partial<C
               key={m}
               type="button"
               className={`seg-btn${mode === m ? " active" : ""}`}
-              onClick={() => update({ priceMode: m })}
+              onClick={() =>
+                update(m === "per_sqm" ? { priceMode: m, areaFormula: ILOT_FORMULA } : { priceMode: m })
+              }
             >
               {m === "fixed" ? "Prix fixe" : "Au m²"}
             </button>
@@ -705,14 +742,13 @@ function IlotBody({ block, update }: { block: ConfigBlock; update: (p: Partial<C
               <span className="affix">€/m²</span>
             </span>
           </div>
-          <div>
-            <div className="field-label" style={{ marginBottom: 8 }}>
-              Formule de calcul de l&apos;îlot
+          <div className="callout info">
+            <Info size={15} strokeWidth={1.9} />
+            <div>
+              Surface facturée de l&apos;îlot = <strong>Largeur × Longueur</strong> (son emprise
+              au sol). Indiquez ci-dessous laquelle de vos mesures est la largeur et laquelle est
+              la longueur.
             </div>
-            <AreaFormulaPicker
-              value={block.areaFormula ?? "width_length"}
-              onChange={(areaFormula) => update({ areaFormula })}
-            />
           </div>
         </>
       )}
@@ -820,7 +856,8 @@ function IlotBody({ block, update }: { block: ConfigBlock; update: (p: Partial<C
 
 function OptionsBody({ block, update }: { block: ConfigBlock; update: (p: Partial<ConfigBlock>) => void }) {
   const options = block.options ?? [];
-  const withImage = block.type === "opening_details" || block.type === "options";
+  const withImage =
+    block.type === "colors" || block.type === "opening_details" || block.type === "options";
   const withColor = block.type === "colors";
   const withSurcharge = block.type === "colors" || block.type === "opening_details" || block.type === "options";
   const set = (i: number, p: Partial<ConfigBlockOption>) =>
@@ -866,6 +903,18 @@ function OptionsBody({ block, update }: { block: ConfigBlock; update: (p: Partia
         </label>
       )}
 
+      {withColor && (
+        <div className="callout info" style={{ marginBottom: 12 }}>
+          <Info size={15} strokeWidth={1.9} />
+          <div>
+            Ce bloc concerne les couleurs des <strong>éléments et accessoires</strong> livrés avec
+            le produit — pas le coloris du produit lui-même, qui se gère dans l&apos;onglet
+            « Médias &amp; couleurs » et pilote la galerie. Joignez une photo à chaque couleur :
+            l&apos;app l&apos;affiche en grand pendant le choix. Sans photo, le client ne voit
+            qu&apos;une pastille.
+          </div>
+        </div>
+      )}
       {options.length > 0 && (
         <div className="repeater" style={{ marginBottom: 12 }}>
           <div className="repeater-head">
