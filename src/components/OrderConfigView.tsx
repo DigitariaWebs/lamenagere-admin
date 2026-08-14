@@ -35,7 +35,8 @@ export interface ConfiguredLayout {
       priceCents: number;
     }[];
   }[];
-  ilot?: { widthM: number; depthM: number; topM: number; tight?: boolean };
+  ilot?: { widthM: number; depthM: number; topM: number; rotationQuarters?: number; tight?: boolean };
+  rotationQuarters?: number;
   worktopTopM: number;
   credence: boolean;
   modulesTotalCents: number;
@@ -137,6 +138,19 @@ function LayoutPlan({ layout }: { layout: ConfiguredLayout }) {
   if (!(W > 0) || !(D > 0)) return null;
   const pad = 0.4;
 
+  /**
+   * The runs are described in the kitchen's own frame, so they are laid out
+   * against the canonical room and the whole group is turned — the same trick
+   * the app's renderer uses. Drawing them straight against the real room would
+   * put the kitchen in the wrong corner the moment it had been rotated.
+   */
+  const quarters = (((layout.rotationQuarters ?? 0) % 4) + 4) % 4;
+  const turned = quarters % 2 === 1;
+  const Wc = turned ? D : W;
+  const Dc = turned ? W : D;
+
+  const backLen = layout.runs.find((r) => r.wall === "back")?.lengthM ?? Wc;
+
   type Box = { x: number; y: number; w: number; h: number; dashed: boolean; label: string };
   const boxes: Box[] = [];
 
@@ -161,7 +175,8 @@ function LayoutPlan({ layout }: { layout: ConfiguredLayout }) {
           label: m.label,
         };
       } else if (run.wall === "right") {
-        box = { x: W - md, y: CORNER_M + m.offsetM, w: md, h: mw, dashed, label: m.label };
+        // At the end of the back run, not the far wall — see the app's renderer.
+        box = { x: backLen - md, y: CORNER_M + m.offsetM, w: md, h: mw, dashed, label: m.label };
       }
       if (box) boxes.push(box);
     }
@@ -169,6 +184,11 @@ function LayoutPlan({ layout }: { layout: ConfiguredLayout }) {
 
   const solid = boxes.filter((b) => !b.dashed);
   const upper = boxes.filter((b) => b.dashed);
+
+  // A quarter-turned island swaps which way its length runs.
+  const ilotTurned = ((layout.ilot?.rotationQuarters ?? 0) % 2) === 1;
+  const ilotAlongX = ilotTurned ? (layout.ilot?.depthM ?? 0) : (layout.ilot?.widthM ?? 0);
+  const ilotAlongZ = ilotTurned ? (layout.ilot?.widthM ?? 0) : (layout.ilot?.depthM ?? 0);
 
   return (
     <svg
@@ -187,6 +207,7 @@ function LayoutPlan({ layout }: { layout: ConfiguredLayout }) {
         stroke="var(--outline)"
         strokeWidth={0.03}
       />
+      <g transform={`rotate(${quarters * 90} ${W / 2} ${D / 2}) translate(${(W - Wc) / 2} ${(D - Dc) / 2})`}>
       {solid.map((b, i) => (
         <rect
           key={`s${i}`}
@@ -216,12 +237,13 @@ function LayoutPlan({ layout }: { layout: ConfiguredLayout }) {
           strokeDasharray="0.08 0.06"
         />
       ))}
+      </g>
       {layout.ilot && (
         <rect
-          x={(W - layout.ilot.widthM) / 2}
-          y={(D - layout.ilot.depthM) / 2 + CORNER_M / 2}
-          width={layout.ilot.widthM}
-          height={layout.ilot.depthM}
+          x={(W - ilotAlongX) / 2}
+          y={(D - ilotAlongZ) / 2 + CORNER_M / 2}
+          width={ilotAlongX}
+          height={ilotAlongZ}
           fill="var(--surface-container)"
           stroke="var(--primary)"
           strokeWidth={0.022}
