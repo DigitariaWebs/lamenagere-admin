@@ -219,8 +219,11 @@ function ColorRow({
         <MediaLibrary
           open={libOpen}
           folder="products"
+          multiple
+          // Opened by the "Bibliothèque" tile; "Téléverser" handles new files.
+          defaultTab="gallery"
           onClose={() => setLibOpen(false)}
-          onPick={(url) => addImages([url])}
+          onPick={(urls) => addImages(urls)}
         />
       </div>
     </div>

@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Activity,
   ImagePlay,
+  Images,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,6 +38,7 @@ export const NAV: NavItem[] = [
   { key: "tickets", label: "Tickets SAV", href: "/tickets", icon: LifeBuoy },
   { key: "customers", label: "Clients", href: "/customers", icon: Users },
   { key: "categories", label: "Catégories", href: "/categories", icon: FolderTree },
+  { key: "gallery", label: "Galerie", href: "/gallery", icon: Images },
   { key: "featured", label: "Mise en avant", href: "/featured", icon: Star },
   { key: "popups", label: "Pop-ups", href: "/popups", icon: ImagePlay },
   { key: "promoCodes", label: "Codes promo", href: "/promo-codes", icon: Ticket },
@@ -82,6 +84,10 @@ const STATIC_CRUMBS: Record<string, Crumb[]> = {
   "/customers": [
     { label: "Tableau de bord", href: "/dashboard" },
     { label: "Clients" },
+  ],
+  "/gallery": [
+    { label: "Tableau de bord", href: "/dashboard" },
+    { label: "Galerie" },
   ],
   "/categories": [
     { label: "Tableau de bord", href: "/dashboard" },

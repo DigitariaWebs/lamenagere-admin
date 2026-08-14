@@ -25,6 +25,8 @@ import {
   Info,
   X,
   Table,
+  Images,
+  Upload,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import MediaLibrary from "./MediaLibrary";
@@ -1118,29 +1120,90 @@ function ImagePick({
   wide?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<"gallery" | "upload">("gallery");
+
+  const openWith = (t: "gallery" | "upload") => {
+    setTab(t);
+    setOpen(true);
+  };
+
+  const preview = (
+    <button
+      type="button"
+      onClick={() => openWith("gallery")}
+      aria-label={label}
+      title={`${label} — galerie ou téléversement`}
+      style={{
+        width: wide ? "100%" : 38,
+        height: wide ? 90 : 32,
+        borderRadius: 8,
+        border: "1px dashed var(--outline-variant)",
+        background: value ? `url(${value}) center/cover` : "var(--surface-container)",
+        cursor: "pointer",
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {!value && <Plus size={14} style={{ color: "var(--outline)" }} />}
+    </button>
+  );
+
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label={label}
-        title={label}
-        style={{
-          width: wide ? "100%" : 38,
-          height: wide ? 90 : 32,
-          borderRadius: 8,
-          border: "1px dashed var(--outline-variant)",
-          background: value ? `url(${value}) center/cover` : "var(--surface-container)",
-          cursor: "pointer",
-          flexShrink: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {!value && <Plus size={14} style={{ color: "var(--outline)" }} />}
-      </button>
-      <MediaLibrary open={open} folder="products" onClose={() => setOpen(false)} onPick={onChange} />
+      {/*
+        The repeater rows (accessories, options) only have room for the 38px
+        preview, so there the choice lives in the picker's two tabs. The `wide`
+        slots have the space to spell both options out.
+      */}
+      {wide ? (
+        <div style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
+          {preview}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              width: 150,
+              flexShrink: 0,
+            }}
+          >
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => openWith("gallery")}
+            >
+              <Images size={14} /> Galerie
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => openWith("upload")}
+            >
+              <Upload size={14} /> Téléverser
+            </button>
+          </div>
+        </div>
+      ) : (
+        preview
+      )}
+      {/*
+        Accessory / option art, unlike a product photo, is meant to be shared by
+        many products — the same "Tiroir range-vaisselle" image belongs to every
+        kitchen. This used to point at folder="products" with no way to find an
+        existing image, so the manager re-uploaded it every time; 20 distinct
+        accessory images ended up referenced 364 times. Open on the gallery so
+        reuse is the default, and file new uploads under accessories/.
+      */}
+      <MediaLibrary
+        open={open}
+        folder="accessories"
+        kind="accessory"
+        defaultTab={tab}
+        onClose={() => setOpen(false)}
+        onPick={(urls) => urls[0] && onChange(urls[0])}
+      />
     </>
   );
 }

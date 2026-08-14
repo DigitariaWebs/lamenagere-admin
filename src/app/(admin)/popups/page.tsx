@@ -267,7 +267,7 @@ export default function PopupsPage() {
                     </div>
                   </div>
                   <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickFile} />
-                  <MediaLibrary open={libOpen} folder="popups" onClose={() => setLibOpen(false)} onPick={(url) => setForm((f) => ({ ...f, imageUrl: url, imagePath: "" }))} />
+                  <MediaLibrary open={libOpen} folder="popups" onClose={() => setLibOpen(false)} onPick={(urls) => urls[0] && setForm((f) => ({ ...f, imageUrl: urls[0], imagePath: "" }))} />
                 </div>
                 <div className="field">
                   <label className="field-label">Lien au clic</label>

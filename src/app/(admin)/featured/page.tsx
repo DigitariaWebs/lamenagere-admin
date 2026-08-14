@@ -421,7 +421,7 @@ export default function FeaturedPage() {
                     </div>
                   </div>
                   <input ref={slideFileRef} type="file" accept="image/*,video/*" hidden onChange={onPickSlideFile} />
-                  <MediaLibrary open={slideLibOpen} folder="carousel" onClose={() => setSlideLibOpen(false)} onPick={(url) => setSlideForm((f) => ({ ...f, mediaUrl: url }))} />
+                  <MediaLibrary open={slideLibOpen} folder="carousel" onClose={() => setSlideLibOpen(false)} onPick={(urls) => urls[0] && setSlideForm((f) => ({ ...f, mediaUrl: urls[0] }))} />
                 </div>
                 <div className="field">
                   <label className="field-label">Lien au clic</label>

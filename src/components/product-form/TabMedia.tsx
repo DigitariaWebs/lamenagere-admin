@@ -164,8 +164,14 @@ export function TabMedia({
         <MediaLibrary
           open={libOpen}
           folder="products"
+          multiple
+          // Opened by the "Bibliothèque" tile, so land on the gallery. The
+          // "Téléverser" tile next to it is the upload path.
+          defaultTab="gallery"
           onClose={() => setLibOpen(false)}
-          onPick={(url) => setImages(images.includes(url) ? images : [...images, url])}
+          onPick={(urls) =>
+            setImages([...images, ...urls.filter((u) => !images.includes(u))])
+          }
         />
 
         {images.length === 0 && (

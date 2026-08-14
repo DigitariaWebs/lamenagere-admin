@@ -7,10 +7,13 @@ import { NAV } from "./nav";
  * `server/src/modules/admin/*` — c'est le back-end qui fait foi.
  */
 export const ROLE_NAV_KEYS: Record<AdminRole, string[]> = {
-  super_admin: ["dashboard", "analytics", "products", "orders", "quotes", "messages", "tickets", "customers", "categories", "featured", "popups", "promoCodes", "campaigns", "settings", "users", "activity"],
-  admin: ["dashboard", "analytics", "products", "orders", "quotes", "messages", "tickets", "customers", "categories", "featured", "popups", "promoCodes", "campaigns", "activity"],
+  // `gallery` mirrors @Roles('admin','super_admin','editor') on
+  // AdminMediaController — manager/support would get a 403, so the module stays
+  // hidden for them rather than leading to a dead page.
+  super_admin: ["dashboard", "analytics", "products", "orders", "quotes", "messages", "tickets", "customers", "categories", "gallery", "featured", "popups", "promoCodes", "campaigns", "settings", "users", "activity"],
+  admin: ["dashboard", "analytics", "products", "orders", "quotes", "messages", "tickets", "customers", "categories", "gallery", "featured", "popups", "promoCodes", "campaigns", "activity"],
   manager: ["dashboard", "orders", "quotes", "messages", "tickets", "customers"],
-  editor: ["dashboard", "products", "categories", "featured", "popups", "campaigns"],
+  editor: ["dashboard", "products", "categories", "gallery", "featured", "popups", "campaigns"],
   support: ["dashboard", "messages", "tickets", "customers"],
 };
 
@@ -43,6 +46,7 @@ export const ROLE_DOCS: Record<AdminRole, RoleDoc> = {
       "Bras droit du super admin : pilote tout le CRM au quotidien, sans toucher à l'équipe ni aux réglages de la boutique.",
     can: [
       "Catalogue complet : produits, catégories, mises en avant, pop-ups",
+      "Galerie média : organiser, renommer et réutiliser les images",
       "Commandes, devis, remboursements",
       "Messages, tickets SAV et fiches clients",
       "Codes promo, campagnes de notification et analytics",
@@ -64,7 +68,7 @@ export const ROLE_DOCS: Record<AdminRole, RoleDoc> = {
     ],
     cannot: [
       "Créer ou modifier des produits, catégories ou mises en avant",
-      "Gérer les codes promo, pop-ups et campagnes",
+      "Gérer les codes promo, pop-ups, campagnes et la galerie média",
       "Accéder aux analytics, aux paramètres et aux utilisateurs",
     ],
   },
@@ -74,6 +78,7 @@ export const ROLE_DOCS: Record<AdminRole, RoleDoc> = {
     can: [
       "Créer et modifier les produits, prix, options et photos",
       "Organiser les catégories et les mises en avant de la page d'accueil",
+      "Gérer la galerie média : dossiers, noms, réutilisation des visuels",
       "Publier les pop-ups marketing",
       "Envoyer les campagnes de notification",
     ],
@@ -93,7 +98,7 @@ export const ROLE_DOCS: Record<AdminRole, RoleDoc> = {
     ],
     cannot: [
       "Traiter les commandes, les devis et les remboursements",
-      "Modifier le catalogue (produits, catégories, mises en avant)",
+      "Modifier le catalogue (produits, catégories, mises en avant, galerie média)",
       "Gérer les codes promo, pop-ups, campagnes et analytics",
       "Accéder aux paramètres et aux utilisateurs",
     ],
@@ -106,6 +111,7 @@ export const PERMISSION_MODULES: { key: string; label: string; hint: string }[] 
   { key: "analytics", label: "Analytics", hint: "Chiffre d'affaires, conversion, rapports" },
   { key: "products", label: "Produits", hint: "Catalogue, prix, options, photos" },
   { key: "categories", label: "Catégories", hint: "Arborescence du catalogue" },
+  { key: "gallery", label: "Galerie", hint: "Bibliothèque d'images : dossiers, recherche, réutilisation" },
   { key: "featured", label: "Mise en avant", hint: "Sélections de la page d'accueil" },
   { key: "popups", label: "Pop-ups", hint: "Visuels marketing au lancement de l'app" },
   { key: "orders", label: "Commandes", hint: "Suivi, statuts, remboursements" },

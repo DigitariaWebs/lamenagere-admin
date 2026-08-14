@@ -71,6 +71,55 @@ export interface MediaItem {
   createdAt?: string;
 }
 
+/** A catalogued asset from the Gallery (media_assets). */
+export interface GalleryAsset {
+  id: string;
+  path: string;
+  url: string;
+  /** Logical folder the manager organises by — never a storage path. */
+  folder: string;
+  label: string | null;
+  kind: string;
+  size: number | null;
+  mime: string | null;
+  width: number | null;
+  height: number | null;
+  /** Category/product names derived from what references the asset. */
+  autoTags: string[];
+  createdAt: string;
+}
+
+export interface GalleryFolder {
+  name: string;
+  count: number;
+  size: number;
+}
+
+/** One place that still points at an asset, shown before offering to delete. */
+export interface MediaUsage {
+  source: string;
+  label: string;
+}
+
+export interface MediaQuery {
+  folder?: string;
+  kind?: string;
+  q?: string;
+  page?: number;
+  limit?: number;
+}
+
+function mediaQs(query: MediaQuery = {}): string {
+  const p = new URLSearchParams();
+  if (query.folder) p.set("folder", query.folder);
+  if (query.kind) p.set("kind", query.kind);
+  if (query.q) p.set("q", query.q);
+  if (query.page) p.set("page", String(query.page));
+  if (query.limit) p.set("limit", String(query.limit));
+  const qs = p.toString();
+  return qs ? `?${qs}` : "";
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -106,22 +155,37 @@ export const api = {
     request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
   put: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
+  patch: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "DELETE", body: body ? JSON.stringify(body) : undefined }),
 
-  /** Multipart upload to /admin/media; returns the public URL. */
-  async upload(file: File, folder = "products"): Promise<{ url: string; path: string }> {
+  /**
+   * Multipart upload to /admin/media; returns the public URL.
+   *
+   * `folder` is the STORAGE prefix (products/, accessories/…). `galleryFolder`
+   * is the logical folder the file is filed under in the Gallery — pass it so
+   * an upload started from inside a folder lands there instead of "Non classé".
+   *
+   * The server compresses and deduplicates: uploading a file it already holds
+   * returns the existing object, so `deduped: true` means nothing new was
+   * written and the URL points at the copy that was already there.
+   */
+  async upload(
+    file: File,
+    folder = "products",
+    galleryFolder?: string,
+  ): Promise<{ url: string; path: string; deduped?: boolean }> {
     const token = getToken();
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch(
-      `${API_BASE_URL}/admin/media?folder=${encodeURIComponent(folder)}`,
-      {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: form,
-      },
-    );
+    const qs = new URLSearchParams({ folder });
+    if (galleryFolder) qs.set("galleryFolder", galleryFolder);
+    const res = await fetch(`${API_BASE_URL}/admin/media?${qs}`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw { message: data?.message ?? "Upload échoué", status: res.status } as ApiError;
@@ -137,9 +201,25 @@ export const adminApi = {
   analytics: (days = 30) => api.get(`/admin/analytics?days=${days}`),
 
   media: {
-    list: (folder = "products") =>
-      api.get<MediaItem[]>(`/admin/media?folder=${encodeURIComponent(folder)}`),
-    remove: (path: string) => api.delete("/admin/media", { path }),
+    /**
+     * Browse the Gallery. `folder` here is the logical folder, not the storage
+     * prefix that `api.upload` takes — organising never moves a file.
+     */
+    list: (query: MediaQuery = {}) =>
+      api.get<Paginated<GalleryAsset>>(`/admin/media${mediaQs(query)}`),
+    folders: () => api.get<GalleryFolder[]>("/admin/media/folders"),
+    createFolder: (name: string) =>
+      api.post<GalleryFolder>("/admin/media/folders", { name }),
+    /** What still references this asset. Empty means it's safe to delete. */
+    usage: (id: string) => api.get<MediaUsage[]>(`/admin/media/${id}/usage`),
+    update: (id: string, patch: { folder?: string; label?: string }) =>
+      api.patch<GalleryAsset>(`/admin/media/${id}`, patch),
+    move: (ids: string[], folder: string) =>
+      api.post<{ moved: number }>("/admin/media/move", { ids, folder }),
+    /** Soft delete. Rejected with 409 while the asset is still in use. */
+    remove: (id: string) => api.delete(`/admin/media/${id}`),
+    restore: (id: string) =>
+      api.post<GalleryAsset>(`/admin/media/${id}/restore`, {}),
   },
 
   products: {

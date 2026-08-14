@@ -308,7 +308,7 @@ export default function CategoriesPage() {
                     open={coverLibOpen}
                     folder="categories"
                     onClose={() => setCoverLibOpen(false)}
-                    onPick={(url) => patch({ imageUrl: url })}
+                    onPick={(urls) => urls[0] && patch({ imageUrl: urls[0] })}
                   />
                 </div>
 

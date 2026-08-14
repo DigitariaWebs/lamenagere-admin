@@ -15,6 +15,30 @@ export interface ConfigEntry {
   options?: { key: string; label: string; surchargeCents?: number; image?: string }[];
   photos?: { url: string; type: string }[];
   ilot?: { included: boolean; surchargeCents?: number; image?: string };
+  layout?: ConfiguredLayout;
+}
+
+/** The implantation the app generated from the customer's answers. */
+export interface ConfiguredLayout {
+  shape: string;
+  room: { widthM: number; depthM: number; heightM: number };
+  runs: {
+    wall: string;
+    lengthM: number;
+    modules: {
+      moduleId: string;
+      label: string;
+      slot: string;
+      offsetM: number;
+      widthMm: number;
+      depthMm: number;
+      priceCents: number;
+    }[];
+  }[];
+  ilot?: { widthM: number; depthM: number; topM: number; tight?: boolean };
+  worktopTopM: number;
+  credence: boolean;
+  modulesTotalCents: number;
 }
 
 /** The three runs seen from above — the same drawing the app shows. */
@@ -89,6 +113,218 @@ function MeasuredPlan({
         </>
       )}
     </svg>
+  );
+}
+
+/** Clearance the app leaves between a corner and the start of a return run. */
+const CORNER_M = 0.6;
+
+/**
+ * The implantation drawn to scale, seen from above.
+ *
+ * This is the whole point of the 3D step for the back office: not what the
+ * customer clicked, but the shape of the kitchen that has to be built. Base
+ * units and columns are drawn solid because they define the footprint; wall
+ * units are dashed, which is how a fitted kitchen is drawn on a real plan.
+ *
+ * The geometry mirrors the app's renderer, including the direction each return
+ * run travels — the left one is laid front-to-back so its cabinets face into
+ * the room, the right one back-to-front.
+ */
+function LayoutPlan({ layout }: { layout: ConfiguredLayout }) {
+  const W = layout.room.widthM;
+  const D = layout.room.depthM;
+  if (!(W > 0) || !(D > 0)) return null;
+  const pad = 0.4;
+
+  type Box = { x: number; y: number; w: number; h: number; dashed: boolean; label: string };
+  const boxes: Box[] = [];
+
+  layout.runs.forEach((run) => {
+    for (const m of run.modules) {
+      const mw = (m.widthMm || 0) / 1000;
+      const md = (m.depthMm || 0) / 1000;
+      if (mw <= 0 || md <= 0) continue;
+      const dashed = m.slot === "haut";
+      let box: Box | null = null;
+      if (run.wall === "back") {
+        box = { x: m.offsetM, y: 0, w: mw, h: md, dashed, label: m.label };
+      } else if (run.wall === "left") {
+        // Anchored at the corner, not at the front wall: the room can be deeper
+        // than the run is long. Mirrors the app's renderer exactly.
+        box = {
+          x: 0,
+          y: CORNER_M + run.lengthM - m.offsetM - mw,
+          w: md,
+          h: mw,
+          dashed,
+          label: m.label,
+        };
+      } else if (run.wall === "right") {
+        box = { x: W - md, y: CORNER_M + m.offsetM, w: md, h: mw, dashed, label: m.label };
+      }
+      if (box) boxes.push(box);
+    }
+  });
+
+  const solid = boxes.filter((b) => !b.dashed);
+  const upper = boxes.filter((b) => b.dashed);
+
+  return (
+    <svg
+      viewBox={`${-pad} ${-pad} ${W + pad * 2} ${D + pad * 2}`}
+      style={{ width: "100%", maxWidth: 460, height: "auto", overflow: "visible" }}
+      role="img"
+      aria-label="Plan de l'implantation vue de dessus"
+    >
+      {/* Room outline. */}
+      <rect
+        x={0}
+        y={0}
+        width={W}
+        height={D}
+        fill="var(--surface-container-low)"
+        stroke="var(--outline)"
+        strokeWidth={0.03}
+      />
+      {solid.map((b, i) => (
+        <rect
+          key={`s${i}`}
+          x={b.x}
+          y={b.y}
+          width={b.w}
+          height={b.h}
+          fill="var(--surface-container)"
+          stroke="var(--primary)"
+          strokeWidth={0.022}
+        >
+          <title>{b.label}</title>
+        </rect>
+      ))}
+      {/* Wall units last and dashed, over the base units they hang above —
+          the convention every fitted-kitchen plan uses. */}
+      {upper.map((b, i) => (
+        <rect
+          key={`u${i}`}
+          x={b.x}
+          y={b.y}
+          width={b.w}
+          height={b.h}
+          fill="none"
+          stroke="var(--outline)"
+          strokeWidth={0.018}
+          strokeDasharray="0.08 0.06"
+        />
+      ))}
+      {layout.ilot && (
+        <rect
+          x={(W - layout.ilot.widthM) / 2}
+          y={(D - layout.ilot.depthM) / 2 + CORNER_M / 2}
+          width={layout.ilot.widthM}
+          height={layout.ilot.depthM}
+          fill="var(--surface-container)"
+          stroke="var(--primary)"
+          strokeWidth={0.022}
+        >
+          <title>Îlot</title>
+        </rect>
+      )}
+      {/* Overall dimensions, written on the room rather than on each cabinet. */}
+      <text x={W / 2} y={-0.12} fontSize={0.19} fill="var(--outline)" textAnchor="middle">
+        {W.toFixed(2).replace(".", ",")} m
+      </text>
+      <text
+        x={-0.14}
+        y={D / 2}
+        fontSize={0.19}
+        fill="var(--outline)"
+        textAnchor="middle"
+        transform={`rotate(-90 ${-0.14} ${D / 2})`}
+      >
+        {D.toFixed(2).replace(".", ",")} m
+      </text>
+    </svg>
+  );
+}
+
+/** The implantation as a card: the plan, then the run-by-run element list. */
+function LayoutCard({ entry }: { entry: ConfigEntry }) {
+  const layout = entry.layout!;
+  const shape = layout.shape === "u" ? "en U" : layout.shape === "l" ? "en L" : "en I";
+  const count = layout.runs.reduce((n, r) => n + r.modules.length, 0);
+  const LEVELS = [
+    { slot: "bas", label: "Meubles bas" },
+    { slot: "colonne", label: "Colonnes" },
+    { slot: "haut", label: "Meubles hauts" },
+  ];
+
+  return (
+    <Card title={entry.label}>
+      <div className="hstack" style={{ gap: 28, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <LayoutPlan layout={layout} />
+        <div style={{ flex: "1 1 260px", minWidth: 240 }}>
+          <div style={{ fontSize: 22, fontFamily: "var(--display)" }}>Cuisine {shape}</div>
+          <div className="field-hint" style={{ marginBottom: 12 }}>
+            {count} élément{count > 1 ? "s" : ""} · hauteur sous plafond{" "}
+            {layout.room.heightM.toFixed(2).replace(".", ",")} m · plan de travail à{" "}
+            {Math.round((layout.worktopTopM ?? 0.9) * 100)} cm ·{" "}
+            {layout.credence === false ? "sans crédence" : "avec crédence"}
+            {layout.ilot
+              ? ` · îlot ${layout.ilot.widthM.toFixed(2).replace(".", ",")} × ${layout.ilot.depthM
+                  .toFixed(2)
+                  .replace(".", ",")} m à ${Math.round((layout.ilot.topM ?? 0.9) * 100)} cm`
+              : ""}
+          </div>
+
+          {/* The island is drawn at the size that was measured even when it
+              does not leave a passage — saying so beats quietly shrinking it. */}
+          {layout.ilot?.tight && (
+            <div
+              style={{
+                fontSize: 12.5,
+                padding: "8px 12px",
+                borderRadius: 8,
+                background: "color-mix(in srgb, var(--warning, #F59E0B) 12%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--warning, #F59E0B) 40%, transparent)",
+                marginBottom: 12,
+              }}
+            >
+              Îlot serré : moins de 70 cm de passage d&apos;un côté. À confirmer avec le
+              client avant fabrication.
+            </div>
+          )}
+
+          {layout.runs.map((run, i) => (
+            <div key={i} style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>
+                Mur {i + 1}{" "}
+                <span style={{ color: "var(--outline)", fontWeight: 400 }}>
+                  {run.lengthM.toFixed(2).replace(".", ",")} m
+                </span>
+              </div>
+              {LEVELS.map((level) => {
+                const picked = run.modules.filter((m) => m.slot === level.slot);
+                if (!picked.length) return null;
+                return (
+                  <div
+                    key={level.slot}
+                    style={{ fontSize: 12.5, color: "var(--outline)", marginTop: 3 }}
+                  >
+                    {level.label} : {picked.map((m) => m.label).join(", ")}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+
+          <div className="field-hint">
+            Implantation standard générée à partir des réponses du client. Le prix de la ligne
+            reste calculé sur la gamme et la surface — les {formatEUR(layout.modulesTotalCents / 100)}{" "}
+            d&apos;éléments ne sont qu&apos;une référence atelier.
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -205,7 +441,8 @@ export function OrderConfigView({ config }: { config?: ConfigEntry[] }) {
 
   // The colourway and the gamme identify the product itself, so they lead —
   // the server appends them last, which buried them under ten option cards.
-  const LEAD = ["product-color", "quality-tier"];
+  // The implantation leads outright: it is the shape of the thing to build.
+  const LEAD = ["product-color", "quality-tier", "kitchen-layout"];
   const ordered = [...entries].sort(
     (a, b) => LEAD.indexOf(b.blockId) - LEAD.indexOf(a.blockId),
   );
@@ -214,6 +451,8 @@ export function OrderConfigView({ config }: { config?: ConfigEntry[] }) {
     <div className="stack">
       {ordered.map((e, i) => {
         const key = `${e.blockId}-${i}`;
+
+        if (e.layout) return <LayoutCard key={key} entry={e} />;
 
         if (e.blockId === "quality-tier") {
           return (
