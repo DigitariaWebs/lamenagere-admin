@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import { toast } from "sonner";
 import { Truck, ArrowRight, Check, Eye } from "lucide-react";
 import { adminApi } from "@/lib/api";
+import { LayoutPlan, type ConfiguredLayout } from "@/components/OrderConfigView";
 import { formatEUR } from "@/lib/format";
 
 const FLOW = ["commande_confirmee", "en_preparation", "en_attente_expedition", "expediee", "livree"] as const;
@@ -38,6 +39,8 @@ interface ConfigEntry {
   options?: { label: string; surchargeCents?: number }[];
   photos?: { url: string; type: string }[];
   ilot?: { included: boolean; surchargeCents?: number };
+  /** The 3D implantation, exactly as the customer arranged it. */
+  layout?: ConfiguredLayout;
 }
 
 interface RecapRow {
@@ -100,6 +103,41 @@ function configRecapRows(config?: ConfigEntry[]): RecapRow[] {
         label: e.label,
         value: `${e.photos.length} fichier${e.photos.length > 1 ? "s" : ""}`,
       });
+    } else if (e.layout) {
+      // The implantation had no branch at all, so a customer who arranged their
+      // whole kitchen in 3D left no trace on this page — the plan existed, but
+      // only for whoever thought to open the item.
+      const shape =
+        e.layout.shape === "u" ? "en U" : e.layout.shape === "l" ? "en L" : "en I";
+      const count = e.layout.runs.reduce((n, r) => n + r.modules.length, 0);
+      const free = e.layout.runs.reduce(
+        (n, r) => n + r.modules.filter((m) => m.x != null && m.z != null).length,
+        0,
+      );
+      rows.push({
+        label: e.label,
+        value: `Cuisine ${shape} · ${count} élément${count > 1 ? "s" : ""}`,
+      });
+      rows.push({
+        label: "Pièce",
+        value: `${e.layout.room.widthM.toFixed(2).replace(".", ",")} × ${e.layout.room.depthM
+          .toFixed(2)
+          .replace(".", ",")} m`,
+        sub: true,
+      });
+      // Worth saying on the order itself: these are the units the customer took
+      // out of a row and stood somewhere of their own, which is the part of the
+      // plan a fitter cannot guess from a parts list.
+      if (free > 0) {
+        rows.push({
+          label: "Dont posés librement",
+          value: `${free} élément${free > 1 ? "s" : ""}`,
+          sub: true,
+        });
+      }
+      if (e.layout.runs.some((r) => r.overlaps)) {
+        rows.push({ label: "À vérifier", value: "Côtés en chevauchement", sub: true });
+      }
     }
   }
   return rows;

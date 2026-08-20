@@ -23,8 +23,19 @@ export interface ConfiguredLayout {
   shape: string;
   room: { widthM: number; depthM: number; heightM: number };
   runs: {
+    /** What the run is called. No longer where it is — see x/z below. */
     wall: string;
     lengthM: number;
+    /**
+     * Centre of the run's footprint in the kitchen's frame, and its quarter
+     * turn. Absent on orders placed before runs could be moved, which are
+     * still drawn from the wall they are named after.
+     */
+    x?: number;
+    z?: number;
+    rotationQuarters?: number;
+    /** The customer left this run standing in another one. */
+    overlaps?: boolean;
     modules: {
       moduleId: string;
       label: string;
@@ -32,6 +43,14 @@ export interface ConfiguredLayout {
       offsetM: number;
       widthMm: number;
       depthMm: number;
+      /**
+       * Where the customer stood this cabinet after taking it out of the row,
+       * in the kitchen's frame, and the quarter turn they left it at. Absent
+       * for anything still on its run, where the offset says everything.
+       */
+      x?: number;
+      z?: number;
+      rotationQuarters?: number;
       priceCents: number;
     }[];
   }[];
@@ -119,6 +138,8 @@ function MeasuredPlan({
 
 /** Clearance the app leaves between a corner and the start of a return run. */
 const CORNER_M = 0.6;
+/** Carcass depth of a run, mirrored from RUN_DEPTH_M in the app. */
+const RUN_DEPTH_M = 0.6;
 
 /**
  * The implantation drawn to scale, seen from above.
@@ -132,7 +153,21 @@ const CORNER_M = 0.6;
  * run travels — the left one is laid front-to-back so its cabinets face into
  * the room, the right one back-to-front.
  */
-function LayoutPlan({ layout }: { layout: ConfiguredLayout }) {
+export function LayoutPlan({
+  layout,
+  /**
+   * How wide the drawing may get.
+   *
+   * The order page shows the plan beside the rest of the configuration rather
+   * than instead of it, so it needs a smaller one than the item page — same
+   * drawing, less room. Scaled rather than cropped: a plan with its return run
+   * cut off is worse than no plan.
+   */
+  maxWidth = 460,
+}: {
+  layout: ConfiguredLayout;
+  maxWidth?: number;
+}) {
   const W = layout.room.widthM;
   const D = layout.room.depthM;
   if (!(W > 0) || !(D > 0)) return null;
@@ -154,14 +189,78 @@ function LayoutPlan({ layout }: { layout: ConfiguredLayout }) {
   type Box = { x: number; y: number; w: number; h: number; dashed: boolean; label: string };
   const boxes: Box[] = [];
 
+  /**
+   * A point in a run's own frame, brought into the plan's.
+   *
+   * The run is built from 0..lengthM along its length and 0..depth across it,
+   * placed by its centre and turned in quarters — so the point is shifted to
+   * the centre, turned, then moved to where the run stands. The plan measures
+   * from the room's top-left corner while the app measures from its middle,
+   * which is the half-room offset at the end.
+   */
+  const place = (run: ConfiguredLayout["runs"][number], px: number, pz: number) => {
+    const q = ((((run.rotationQuarters ?? 0) % 4) + 4) % 4) as 0 | 1 | 2 | 3;
+    const lx = px - run.lengthM / 2;
+    const lz = pz - RUN_DEPTH_M / 2;
+    const r =
+      q === 1 ? { x: -lz, z: lx }
+      : q === 2 ? { x: -lx, z: -lz }
+      : q === 3 ? { x: lz, z: -lx }
+      : { x: lx, z: lz };
+    return { x: r.x + (run.x ?? 0) + Wc / 2, y: r.z + (run.z ?? 0) + Dc / 2 };
+  };
+
   layout.runs.forEach((run) => {
+    /**
+     * Orders placed before runs could be moved carry no position at all, so
+     * they are still drawn from the wall they were named after. Dropping that
+     * path would silently redraw every kitchen already in the system.
+     */
+    const legacy = run.x == null || run.z == null;
+
     for (const m of run.modules) {
       const mw = (m.widthMm || 0) / 1000;
       const md = (m.depthMm || 0) / 1000;
       if (mw <= 0 || md <= 0) continue;
       const dashed = m.slot === "haut";
       let box: Box | null = null;
-      if (run.wall === "back") {
+
+      /**
+       * A cabinet the customer took out of the row is drawn where they left it,
+       * not where its offset would put it — that offset is the place it came
+       * from, and drawing from it would put the caisson back inside the run it
+       * was pulled out of.
+       */
+      if (m.x != null && m.z != null) {
+        const q = ((((m.rotationQuarters ?? 0) % 4) + 4) % 4) as 0 | 1 | 2 | 3;
+        const turnedM = q % 2 === 1;
+        const bw = turnedM ? md : mw;
+        const bh = turnedM ? mw : md;
+        boxes.push({
+          x: m.x + Wc / 2 - bw / 2,
+          y: m.z + Dc / 2 - bh / 2,
+          w: bw,
+          h: bh,
+          dashed,
+          label: m.label,
+        });
+        continue;
+      }
+
+      if (!legacy) {
+        // Quarter turns keep a rectangle axis-aligned, so two opposite corners
+        // are enough to place it.
+        const a = place(run, m.offsetM, 0);
+        const b = place(run, m.offsetM + mw, md);
+        box = {
+          x: Math.min(a.x, b.x),
+          y: Math.min(a.y, b.y),
+          w: Math.abs(b.x - a.x),
+          h: Math.abs(b.y - a.y),
+          dashed,
+          label: m.label,
+        };
+      } else if (run.wall === "back") {
         box = { x: m.offsetM, y: 0, w: mw, h: md, dashed, label: m.label };
       } else if (run.wall === "left") {
         // Anchored at the corner, not at the front wall: the room can be deeper
@@ -193,7 +292,7 @@ function LayoutPlan({ layout }: { layout: ConfiguredLayout }) {
   return (
     <svg
       viewBox={`${-pad} ${-pad} ${W + pad * 2} ${D + pad * 2}`}
-      style={{ width: "100%", maxWidth: 460, height: "auto", overflow: "visible" }}
+      style={{ width: "100%", maxWidth, height: "auto", overflow: "visible" }}
       role="img"
       aria-label="Plan de l'implantation vue de dessus"
     >
@@ -343,6 +442,15 @@ function LayoutCard({ entry }: { entry: ConfigEntry }) {
             Implantation standard générée à partir des réponses du client. Le prix de la ligne
             reste calculé sur la gamme et la surface — les {formatEUR(layout.modulesTotalCents / 100)}{" "}
             d&apos;éléments ne sont qu&apos;une référence atelier.
+          </div>
+
+          {/* The customer is told the same thing on the 3D step, in the same
+              words. Repeating it here stops the plan being read as a signed-off
+              design when it is only where the client put the units. */}
+          <div className="field-hint" style={{ marginTop: 8 }}>
+            Le client voit cet aperçu accompagné de la mention «&nbsp;ceci n&apos;est pas votre
+            cuisine définitive&nbsp;» : il sert à situer l&apos;emplacement des meubles, pas à
+            arrêter les modèles ni les finitions.
           </div>
         </div>
       </div>
