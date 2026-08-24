@@ -15,6 +15,10 @@ interface AdminOrder {
   total: string;
   status: string;
   statusLabel: string;
+  /** Failed refund or open chargeback — money not where the books say (0037). */
+  needsAttention?: boolean;
+  refundSettlement?: "none" | "pending" | "succeeded" | "failed" | "canceled";
+  disputeStatus?: "none" | "open" | "won" | "lost";
   image: string;
   createdAt: string;
   territory: string;
@@ -197,6 +201,22 @@ export default function OrdersPage() {
                         <div className="hstack" style={{ gap: 6 }}>
                           <span style={{ fontWeight: 500, fontSize: 13 }}>{o.client}</span>
                           {o.b2b && <span className="pill pill-bronze-soft" style={{ fontSize: 9, padding: "1px 6px" }}>PRO</span>}
+                          {/* Surfaced in the list so a bounced refund or a
+                              chargeback can't sit unnoticed inside a detail
+                              page nobody opened. */}
+                          {o.needsAttention && (
+                            <span
+                              className="pill pill-error"
+                              style={{ fontSize: 9, padding: "1px 6px" }}
+                              title={
+                                o.disputeStatus === "open"
+                                  ? "Litige bancaire en cours"
+                                  : "Le remboursement a échoué"
+                              }
+                            >
+                              {o.disputeStatus === "open" ? "LITIGE" : "REMB. ÉCHOUÉ"}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </td>

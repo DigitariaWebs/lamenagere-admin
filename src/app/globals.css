@@ -561,6 +561,28 @@ input, textarea, select { font-family: inherit; color: inherit; }
 .pill-outline { background: var(--surface); border: 1px solid var(--outline-variant); color: var(--on-surface-variant); }
 .pill-prep { background: var(--primary-container); color: #fff; }
 
+/* ============ ALERTS ============
+   Money that is not where the books say it is: a refund the bank bounced, a
+   chargeback in progress. Loud on purpose — these are the two states where
+   scrolling past costs real money. */
+.alert {
+  border-radius: 10px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.alert-danger {
+  background: rgba(186,26,26,0.07);
+  border-color: rgba(186,26,26,0.28);
+  color: var(--error);
+}
+.alert-warning {
+  background: rgba(245,158,11,0.10);
+  border-color: rgba(245,158,11,0.32);
+  color: #92400E;
+}
+
 /* ============ TABLES ============ */
 .tbl {
   width: 100%;

@@ -107,13 +107,14 @@ export function TabPricing({
             <div className="field-grid cols-2">
               <TextField
                 id="price"
-                label="Prix de vente TTC"
+                label="Prix de vente HT"
                 required
                 unit="€"
                 inputMode="decimal"
                 value={form.price}
                 error={errors.price}
                 placeholder="0"
+                hint="Hors taxes. La TVA est ajoutée à la commande selon la zone de livraison."
                 onChange={(price) => patch({ price })}
               />
               <TextField
@@ -178,7 +179,7 @@ export function TabPricing({
             <div className="field-grid cols-2">
               <TextField
                 id="pricePerSqm"
-                label="Prix au m²"
+                label="Prix au m² HT"
                 required={tiers.length === 0}
                 unit="€"
                 inputMode="decimal"
@@ -238,7 +239,7 @@ export function TabPricing({
               <div className="repeater" style={{ marginBottom: 12 }}>
                 <div className="repeater-head">
                   <span style={{ flex: 1 }}>Nom de la gamme</span>
-                  <span style={{ width: 130 }}>Prix au m²</span>
+                  <span style={{ width: 130 }}>Prix au m² HT</span>
                   <span style={{ width: 32 }} />
                 </div>
                 {tiers.map((tier, i) => (

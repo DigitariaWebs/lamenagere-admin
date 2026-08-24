@@ -206,12 +206,26 @@ interface OrderDto {
   total: number;
   subtotal: number;
   shippingCost: number;
+  /** VAT charged; `total` is TTC and already includes it. */
+  vat?: number;
+  /** Rate applied, as a percentage: 20 métropole, 0 outre-mer. */
+  vatRate?: number;
+  vatExemptionNote?: string;
   shippingAddress: { firstName: string; lastName: string; street: string; postalCode: string; city: string; country: string; phone?: string };
   territory: string;
   estimatedDelivery: string;
   createdAt: string;
   paymentStatus?: "unpaid" | "paid" | "failed" | "refunded";
   refundStatus?: "none" | "requested" | "refunded" | "rejected";
+  /** Where the refund really is with the bank (server iteration 37). */
+  refundSettlement?: "none" | "pending" | "succeeded" | "failed" | "canceled";
+  refundFailureReason?: string;
+  refundedTotal?: number;
+  disputeStatus?: "none" | "open" | "won" | "lost";
+  disputeReason?: string;
+  disputeAmount?: number;
+  disputeEvidenceDueAt?: string;
+  needsAttention?: boolean;
   refundReason?: string;
   refundDecisionNote?: string;
   refundAmount?: number;
@@ -512,8 +526,12 @@ export default function OrderDetailPage() {
             </div>
             <div style={{ padding: "20px 24px", borderTop: "1px solid var(--outline-soft)", display: "flex", justifyContent: "flex-end" }}>
               <div style={{ width: 300, display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "var(--outline)" }}>Sous-total</span><span>{formatEUR(o.subtotal)}</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "var(--outline)" }}>Sous-total HT</span><span>{formatEUR(o.subtotal)}</span></div>
                 <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "var(--outline)" }}>Livraison</span><span>{formatEUR(o.shippingCost)}</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "var(--outline)" }}>{o.vatRate ? `TVA (${o.vatRate} %)` : "TVA"}</span><span>{o.vatRate ? formatEUR(o.vat ?? 0) : "Non applicable"}</span></div>
+                {o.vatExemptionNote ? (
+                  <div style={{ fontSize: 11, color: "var(--outline)", lineHeight: 1.5, marginTop: 4 }}>{o.vatExemptionNote}</div>
+                ) : null}
                 <div style={{ height: 1, background: "var(--outline-soft)", margin: "8px 0" }}></div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span style={{ fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", fontWeight: 600 }}>Total TTC</span>
@@ -538,6 +556,36 @@ export default function OrderDetailPage() {
 
           <div className="card card-padded">
             <div className="card-title" style={{ marginBottom: 18 }}>Paiement</div>
+
+            {/* Anything where the money is not where the books say it is. Sits
+                above the status pills because it is the one thing that must not
+                be scrolled past. */}
+            {o.disputeStatus === "open" && (
+              <div className="alert alert-danger" style={{ marginBottom: 16 }}>
+                <strong>⚠️ Litige bancaire en cours{o.disputeAmount != null ? ` — ${formatEUR(o.disputeAmount)}` : ""}.</strong>
+                <div style={{ fontSize: 12.5, marginTop: 4 }}>
+                  Motif : {o.disputeReason || "non précisé"}.
+                  {o.disputeEvidenceDueAt
+                    ? ` Preuves à fournir avant le ${new Date(o.disputeEvidenceDueAt).toLocaleDateString("fr-FR")} depuis le tableau de bord Stripe.`
+                    : " Répondez depuis le tableau de bord Stripe."}
+                </div>
+              </div>
+            )}
+            {o.disputeStatus === "lost" && (
+              <div className="alert alert-danger" style={{ marginBottom: 16 }}>
+                <strong>Litige perdu{o.disputeAmount != null ? ` — ${formatEUR(o.disputeAmount)}` : ""}.</strong>
+                <div style={{ fontSize: 12.5, marginTop: 4 }}>Les fonds ont été repris par la banque.</div>
+              </div>
+            )}
+            {o.refundSettlement === "failed" && (
+              <div className="alert alert-danger" style={{ marginBottom: 16 }}>
+                <strong>⚠️ Le remboursement a échoué — le client n&apos;a pas été remboursé.</strong>
+                <div style={{ fontSize: 12.5, marginTop: 4 }}>
+                  Raison : {o.refundFailureReason || "non précisée"}. Relancez le remboursement
+                  ou contactez le client pour obtenir d&apos;autres coordonnées bancaires.
+                </div>
+              </div>
+            )}
             <div className="hstack" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
               <div className="hstack" style={{ gap: 8, flexWrap: "wrap" }}>
                 <span className={`pill ${o.paymentStatus === "refunded" ? "pill-warning" : o.paymentStatus === "paid" ? "pill-success" : "pill-navy"}`}>
@@ -547,6 +595,17 @@ export default function OrderDetailPage() {
                   <span className={`pill ${o.refundStatus === "refunded" ? "pill-success" : o.refundStatus === "rejected" ? "pill-warning" : "pill-prep"}`}>
                     Remb. {o.refundStatus === "requested" ? "demandé" : o.refundStatus === "refunded" ? "effectué" : "refusé"}
                   </span>
+                )}
+                {/* The bank's view, which is the one that decides whether the
+                    customer actually has their money. */}
+                {o.refundSettlement === "pending" && (
+                  <span className="pill pill-prep">Remb. en cours de règlement</span>
+                )}
+                {o.refundSettlement === "failed" && (
+                  <span className="pill pill-warning">Remb. échoué</span>
+                )}
+                {o.refundSettlement === "canceled" && (
+                  <span className="pill pill-warning">Remb. annulé</span>
                 )}
               </div>
 
@@ -573,7 +632,16 @@ export default function OrderDetailPage() {
 
             {o.refundStatus === "refunded" && (
               <div style={{ marginTop: 14, fontSize: 12.5, color: "var(--outline)" }}>
-                {formatEUR(o.refundAmount ?? o.total)} remboursés{o.refundDecidedAt ? ` le ${new Date(o.refundDecidedAt).toLocaleDateString("fr-FR")}` : ""}.
+                {formatEUR(o.refundedTotal ?? o.refundAmount ?? o.total)} remboursés et confirmés par la banque
+                {o.refundDecidedAt ? ` le ${new Date(o.refundDecidedAt).toLocaleDateString("fr-FR")}` : ""}.
+              </div>
+            )}
+            {/* Accepted, sent, not yet settled: the request stays open until a
+                Stripe webhook confirms the money reached the customer. */}
+            {o.refundSettlement === "pending" && (
+              <div style={{ marginTop: 14, fontSize: 12.5, color: "var(--outline)" }}>
+                {formatEUR(o.refundAmount ?? o.total)} envoyés à la banque. Le statut passera
+                automatiquement à « remboursé » dès confirmation (quelques jours ouvrés).
               </div>
             )}
             {o.refundStatus === "rejected" && (
