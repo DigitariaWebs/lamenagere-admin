@@ -15,6 +15,13 @@ interface StoreSettings {
   freeShippingThreshold: number | null;
   autoShippingByWeight: boolean;
   maintenanceMode: boolean;
+  /** Interrupteur général du verrou de version de l'app mobile. */
+  forceUpdateEnabled: boolean;
+  minAppVersionIos: string | null;
+  minAppVersionAndroid: string | null;
+  iosStoreUrl: string | null;
+  androidStoreUrl: string | null;
+  forceUpdateMessage: string | null;
 }
 interface ZoneFee {
   zone: string;
@@ -37,6 +44,7 @@ export default function SettingsPage() {
   const [zones, setZones] = useState<ZoneFee[]>([]);
   const [savingStore, setSavingStore] = useState(false);
   const [savingShip, setSavingShip] = useState(false);
+  const [savingVersion, setSavingVersion] = useState(false);
 
   async function load() {
     const res = (await adminApi.settings.get()) as {
@@ -98,6 +106,26 @@ export default function SettingsPage() {
       toast.error((e as { message?: string })?.message ?? "Échec");
     } finally {
       setSavingShip(false);
+    }
+  }
+
+  async function saveVersion() {
+    if (!s) return;
+    setSavingVersion(true);
+    try {
+      await adminApi.settings.update({
+        forceUpdateEnabled: s.forceUpdateEnabled,
+        minAppVersionIos: s.minAppVersionIos ?? "",
+        minAppVersionAndroid: s.minAppVersionAndroid ?? "",
+        iosStoreUrl: s.iosStoreUrl ?? "",
+        androidStoreUrl: s.androidStoreUrl ?? "",
+        forceUpdateMessage: s.forceUpdateMessage ?? "",
+      });
+      toast.success("Verrou de version enregistré");
+    } catch (e) {
+      toast.error((e as { message?: string })?.message ?? "Échec");
+    } finally {
+      setSavingVersion(false);
     }
   }
 
@@ -185,6 +213,78 @@ export default function SettingsPage() {
           <button className="btn btn-primary btn-sm" onClick={saveShipping} disabled={savingShip}>
             {savingShip ? "Enregistrement…" : "Enregistrer la livraison"}
           </button>
+        </div>
+
+        {/* Verrou de version de l'app mobile (mise à jour forcée) */}
+        <div className="card card-padded" style={{ gridColumn: "1 / -1" }}>
+          <div className="card-title" style={{ marginBottom: 6 }}>Application mobile — mise à jour forcée</div>
+          <div style={{ fontSize: 12, color: "var(--outline)", marginBottom: 18 }}>
+            Bloque les versions trop anciennes sur un écran « Mise à jour requise ». À utiliser
+            quand une faille est corrigée dans une nouvelle version.
+          </div>
+          {s && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontWeight: 500, fontSize: 13 }}>Activer le verrou</div>
+                  <div style={{ fontSize: 11, color: "var(--outline)", marginTop: 2 }}>
+                    Une fois activé, toute version inférieure au minimum ci-dessous ne peut plus
+                    ouvrir l&apos;application.
+                  </div>
+                </div>
+                <span className="switch"><input type="checkbox" checked={s.forceUpdateEnabled} onChange={(e) => patch({ forceUpdateEnabled: e.target.checked })} /><span className="slider"></span></span>
+              </label>
+
+              {s.forceUpdateEnabled && (
+                <div style={{ fontSize: 12, lineHeight: 1.5, padding: "10px 12px", borderRadius: 8, background: "rgba(245, 158, 11, 0.12)", color: "var(--foreground)" }}>
+                  ⚠️ N&apos;activez le verrou qu&apos;une fois la nouvelle version <strong>réellement
+                  disponible au téléchargement</strong> sur les deux stores. Une version encore en
+                  revue App Store ou en déploiement progressif Play laisserait les utilisateurs
+                  bloqués sans pouvoir mettre à jour.
+                </div>
+              )}
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <div className="field">
+                  <label className="field-label">Version minimale iOS</label>
+                  <input className="input mono" placeholder="1.3.0" value={s.minAppVersionIos ?? ""}
+                    onChange={(e) => patch({ minAppVersionIos: e.target.value })} />
+                  <div style={{ fontSize: 11, color: "var(--outline)", marginTop: 4 }}>Vide = aucun blocage sur iOS</div>
+                </div>
+                <div className="field">
+                  <label className="field-label">Version minimale Android</label>
+                  <input className="input mono" placeholder="1.3.0" value={s.minAppVersionAndroid ?? ""}
+                    onChange={(e) => patch({ minAppVersionAndroid: e.target.value })} />
+                  <div style={{ fontSize: 11, color: "var(--outline)", marginTop: 4 }}>Vide = aucun blocage sur Android</div>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <div className="field">
+                  <label className="field-label">Lien App Store</label>
+                  <input className="input" placeholder="https://apps.apple.com/app/id…" value={s.iosStoreUrl ?? ""}
+                    onChange={(e) => patch({ iosStoreUrl: e.target.value })} />
+                </div>
+                <div className="field">
+                  <label className="field-label">Lien Google Play</label>
+                  <input className="input" placeholder="https://play.google.com/store/apps/details?id=…" value={s.androidStoreUrl ?? ""}
+                    onChange={(e) => patch({ androidStoreUrl: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="field">
+                <label className="field-label">Message affiché (optionnel)</label>
+                <textarea className="textarea" style={{ minHeight: 60 }}
+                  placeholder="Laissez vide pour le message par défaut de l'application."
+                  value={s.forceUpdateMessage ?? ""}
+                  onChange={(e) => patch({ forceUpdateMessage: e.target.value })} />
+              </div>
+
+              <button className="btn btn-primary btn-sm" style={{ alignSelf: "flex-start" }} onClick={saveVersion} disabled={savingVersion}>
+                {savingVersion ? "Enregistrement…" : "Enregistrer le verrou"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
